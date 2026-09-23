@@ -8,6 +8,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.AddShoppingCart
 import androidx.compose.material.icons.filled.ChevronLeft
+import androidx.compose.material.icons.filled.DeleteForever
 import androidx.compose.material.icons.filled.ListAlt
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.People
@@ -30,6 +31,7 @@ import com.reyhoon.kitchen.ui.theme.GreenMid
 import com.reyhoon.kitchen.ui.theme.OrangeSecondary
 import com.reyhoon.kitchen.util.NotificationHelper
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -43,13 +45,15 @@ fun AdminDashboardScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     var selectedPeriod by remember { mutableStateOf("روزانه") }
     var lastSeenAt by remember { mutableStateOf(System.currentTimeMillis() - 30_000) }
     var pendingCount by remember { mutableIntStateOf(0) }
     var pendingName by remember { mutableStateOf("") }
     var salesTick by remember { mutableIntStateOf(0) }
+    var showResetConfirm by remember { mutableStateOf(false) }
+    var resetMsg by remember { mutableStateOf<String?>(null) }
 
-    // همگام‌سازی سفارش‌های آنلاین برای گزارش مالی
     LaunchedEffect(Unit) {
         NotificationHelper.ensureChannels(context)
         while (true) {
@@ -61,7 +65,6 @@ fun AdminDashboardScreen(
                     else AppRepository.orders.add(0, r)
                 }
                 salesTick++
-
                 val fresh = ApiClient.fetchNewOrders(lastSeenAt)
                 if (fresh.isNotEmpty()) {
                     NotificationHelper.onNewOrdersDetected(
@@ -71,7 +74,6 @@ fun AdminDashboardScreen(
                     pendingName = fresh.first().customerName
                     lastSeenAt = maxOf(lastSeenAt, fresh.maxOf { it.createdAt })
                 } else if (NotificationHelper.pendingAlarm) {
-                    // تکرار صدای آلارم تا باز کردن صفحه سفارش
                     NotificationHelper.onNewOrdersDetected(context, emptyList(), pendingName)
                 }
             }
@@ -82,8 +84,12 @@ fun AdminDashboardScreen(
     val summary = remember(selectedPeriod, salesTick, AppRepository.orders.size) {
         AppRepository.getSalesSummary(selectedPeriod)
     }
-    val totalDebt = remember(salesTick, AppRepository.customers.size) { AppRepository.totalCustomerDebt() }
-    val totalCredit = remember(salesTick, AppRepository.customers.size) { AppRepository.totalCustomerCredit() }
+    val totalDebt = remember(salesTick, AppRepository.customers.size, AppRepository.orders.size) {
+        AppRepository.totalCustomerDebt()
+    }
+    val totalCredit = remember(salesTick, AppRepository.customers.size) {
+        AppRepository.totalCustomerCredit()
+    }
 
     Scaffold(
         topBar = {
@@ -117,17 +123,13 @@ fun AdminDashboardScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            // بنر سفارش آنلاین — جایگزین لینک ورکر
             if (NotificationHelper.pendingAlarm || pendingCount > 0) {
                 Card(
                     onClick = onNavigateToOrders,
                     colors = CardDefaults.cardColors(containerColor = OrangeSecondary.copy(alpha = 0.25f)),
                     shape = RoundedCornerShape(14.dp)
                 ) {
-                    Row(
-                        modifier = Modifier.padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
+                    Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Filled.NotificationsActive, null, tint = OrangeSecondary)
                         Spacer(modifier = Modifier.width(12.dp))
                         Column(modifier = Modifier.weight(1f)) {
@@ -135,8 +137,7 @@ fun AdminDashboardScreen(
                             Text(
                                 if (pendingName.isNotBlank())
                                     "$pendingName — برای قطع آلارم اینجا بزنید"
-                                else
-                                    "برای مشاهده و قطع آلارم ضربه بزنید"
+                                else "برای مشاهده و قطع آلارم ضربه بزنید"
                             )
                         }
                         Text("مشاهده", fontWeight = FontWeight.Bold, color = OrangeSecondary)
@@ -148,10 +149,7 @@ fun AdminDashboardScreen(
                     colors = CardDefaults.cardColors(containerColor = GreenMid.copy(alpha = 0.12f)),
                     shape = RoundedCornerShape(14.dp)
                 ) {
-                    Row(
-                        modifier = Modifier.padding(14.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
+                    Row(modifier = Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Filled.ListAlt, null, tint = GreenMid)
                         Spacer(modifier = Modifier.width(10.dp))
                         Text("مشاهده سفارش‌های آنلاین", fontWeight = FontWeight.SemiBold)
@@ -160,7 +158,6 @@ fun AdminDashboardScreen(
             }
 
             Text("گزارش فروش", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 listOf("روزانه", "هفتگی", "ماهانه").forEach { period ->
                     FilterChip(
@@ -170,7 +167,6 @@ fun AdminDashboardScreen(
                     )
                 }
             }
-
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 StatCard("فروش کل", AppRepository.formatPrice(summary.totalSales), "${summary.orderCount} سفارش", Modifier.weight(1f), GreenMid)
                 StatCard("دریافتی", AppRepository.formatPrice(summary.totalPaid), "تومان", Modifier.weight(1f), OrangeSecondary)
@@ -183,13 +179,55 @@ fun AdminDashboardScreen(
 
             Spacer(modifier = Modifier.height(8.dp))
             Text("عملیات سریع", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-
             AdminActionButton(Icons.Filled.NotificationsActive, "سفارش‌های آنلاین", "آلارم فقط با باز کردن این صفحه قطع می‌شود", onNavigateToOrders)
             AdminActionButton(Icons.Filled.RestaurantMenu, "مدیریت منو + دسته‌بندی", "چلو / خورشت / نوشیدنی / مخلفات ...", onNavigateToMenuManage)
             AdminActionButton(Icons.Filled.Star, "امتیازات پیک", "امتیاز مشتریان", onNavigateToRatings)
             AdminActionButton(Icons.Filled.AddShoppingCart, "ثبت سفارش (انتخاب مشتری)", "تلفنی / حضوری", onNavigateToNewOrder)
             AdminActionButton(Icons.Filled.People, "مشتریان و بدهی", "افزودن و تسویه", onNavigateToCustomers)
+
+            Spacer(modifier = Modifier.height(16.dp))
+            Text("تنظیمات خطرناک", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.error)
+            Card(
+                onClick = { showResetConfirm = true },
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.4f)),
+                shape = RoundedCornerShape(14.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Filled.DeleteForever, null, tint = MaterialTheme.colorScheme.error)
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column {
+                        Text("پاک کردن تمام داده‌های سرور", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.error)
+                        Text("منو، مشتریان، سفارش‌ها، پرداخت‌ها، امتیازات — ریست کامل")
+                    }
+                }
+            }
+            resetMsg?.let { Text(it, fontWeight = FontWeight.Bold, color = GreenMid) }
         }
+    }
+
+    if (showResetConfirm) {
+        AlertDialog(
+            onDismissRequest = { showResetConfirm = false },
+            title = { Text("⚠️ ریست کامل سرور") },
+            text = { Text("همه داده‌ها از سرور و این دستگاه پاک می‌شوند.\nاین عمل برگشت‌پذیر نیست!") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        scope.launch {
+                            showResetConfirm = false
+                            var ok = true
+                            if (ApiConfig.isConfigured) ok = ApiClient.resetAllData()
+                            AppRepository.clearAllLocal()
+                            salesTick++
+                            resetMsg = if (ok) "✓ همه داده‌ها پاک شدند" else "خطا در سرور — داده محلی پاک شد"
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) { Text("پاک کردن همه چیز") }
+            },
+            dismissButton = { TextButton(onClick = { showResetConfirm = false }) { Text("انصراف") } }
+        )
     }
 }
 
