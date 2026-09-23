@@ -14,12 +14,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.reyhoon.kitchen.data.ApiClient
+import com.reyhoon.kitchen.data.ApiConfig
 import com.reyhoon.kitchen.data.AppRepository
 import com.reyhoon.kitchen.data.Customer
 import com.reyhoon.kitchen.data.FoodItem
 import com.reyhoon.kitchen.data.OrderItem
 import com.reyhoon.kitchen.ui.theme.GreenPrimary
 import com.reyhoon.kitchen.ui.theme.OrangeSecondary
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -29,11 +32,13 @@ fun NewOrderScreen(
 ) {
     val customers = AppRepository.customers
     val menu = AppRepository.menuItems.filter { it.isAvailable }
+    val scope = rememberCoroutineScope()
 
     var selectedCustomer by remember { mutableStateOf<Customer?>(null) }
     var quantities by remember { mutableStateOf<Map<String, Int>>(emptyMap()) }
     var paidNow by remember { mutableStateOf("") }
     var resultMessage by remember { mutableStateOf<String?>(null) }
+    var saving by remember { mutableStateOf(false) }
 
     val cartItems = remember(quantities, menu) {
         menu.mapNotNull { food ->
@@ -188,15 +193,58 @@ fun NewOrderScreen(
                     onClick = {
                         val c = selectedCustomer ?: return@Button
                         val paid = paidNow.toLongOrNull() ?: 0L
-                        val result = AppRepository.createOrder(c, cartItems, paid)
-                        resultMessage = result.message
-                        selectedCustomer = AppRepository.findCustomer(c.id)
+                        scope.launch {
+                            saving = true
+                            // ۱) محلی
+                            val result = AppRepository.createOrder(c, cartItems, paid)
+                            // ۲) سرور — تا در ادمین و اپ مشتری دیده شود
+                            var serverOk = false
+                            if (ApiConfig.isConfigured) {
+                                val remote = ApiClient.createOrder(
+                                    customerId = c.id,
+                                    items = cartItems,
+                                    paidNow = paid,
+                                    note = result.order.note,
+                                    source = "kitchen"
+                                )
+                                if (remote != null) {
+                                    serverOk = true
+                                    val idx = AppRepository.orders.indexOfFirst { it.id == result.order.id }
+                                    if (idx >= 0) {
+                                        AppRepository.orders[idx] = remote.copy(
+                                            customerPhone = remote.customerPhone.ifBlank { c.phone },
+                                            customerAddress = remote.customerAddress.ifBlank { c.address.fullAddress() }
+                                        )
+                                    } else {
+                                        AppRepository.orders.add(0, remote)
+                                    }
+                                    val refreshed = ApiClient.fetchCustomerByCode(c.subscriptionCode ?: "")
+                                    if (refreshed != null) {
+                                        AppRepository.updateCustomer(refreshed)
+                                        selectedCustomer = refreshed
+                                    }
+                                }
+                            }
+                            resultMessage = buildString {
+                                append(result.message)
+                                if (ApiConfig.isConfigured) {
+                                    append(if (serverOk) "\n✓ روی سرور هم ذخیره شد — در ادمین و اپ مشتری دیده می‌شود." else "\n⚠ فقط محلی ذخیره شد (اتصال سرور برقرار نبود).")
+                                }
+                            }
+                            quantities = emptyMap()
+                            paidNow = ""
+                            saving = false
+                        }
                     },
                     modifier = Modifier.fillMaxWidth().height(50.dp),
-                    enabled = selectedCustomer != null && cartItems.isNotEmpty(),
+                    enabled = selectedCustomer != null && cartItems.isNotEmpty() && !saving,
                     shape = RoundedCornerShape(12.dp)
                 ) {
-                    Text("ثبت سفارش")
+                    if (saving) {
+                        CircularProgressIndicator(modifier = Modifier.size(22.dp), color = MaterialTheme.colorScheme.onPrimary, strokeWidth = 2.dp)
+                    } else {
+                        Text("ثبت سفارش (محلی + سرور)", fontWeight = FontWeight.Bold)
+                    }
                 }
             }
         }

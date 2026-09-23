@@ -45,10 +45,15 @@ fun HomeScreen(
     LaunchedEffect(customer?.id) {
         val id = customer?.id ?: return@LaunchedEffect
         while (true) {
+            val local = AppRepository.orders.filter { it.customerId == id }
             if (ApiConfig.isConfigured) {
-                orders = ApiClient.fetchOrders(id)
+                val remote = ApiClient.fetchOrders(id)
+                val byId = linkedMapOf<String, Order>()
+                local.forEach { byId[it.id] = it }
+                remote.forEach { byId[it.id] = it }
+                orders = byId.values.sortedByDescending { it.createdAt }
             } else {
-                orders = AppRepository.orders.filter { it.customerId == id }
+                orders = local.sortedByDescending { it.createdAt }
             }
             delay(8_000)
         }
@@ -114,6 +119,9 @@ fun HomeScreen(
                     Column {
                         Text("مشتری: ${customer!!.name}", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                         Text("کد: ${customer!!.subscriptionCode ?: "—"}", style = MaterialTheme.typography.bodyMedium)
+                        if (customer!!.phone.isNotBlank()) {
+                            Text("تلفن: ${customer!!.phone}", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                        }
                     }
                 }
             }
@@ -173,18 +181,21 @@ fun HomeScreen(
                 Text("ثبت سفارش جدید برای این مشتری", fontWeight = FontWeight.Bold)
             }
 
-            Text("سفارش‌های این مشتری", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+            Text("سفارش‌های این مشتری (محلی + آنلاین)", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
             Text("وضعیت با اپ مشتری همگام است", style = MaterialTheme.typography.bodySmall)
 
             if (orders.isEmpty()) {
                 Text("هنوز سفارشی ثبت نشده", color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
             } else {
-                orders.take(15).forEach { o ->
+                orders.take(20).forEach { o ->
                     Card(shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()) {
                         Column(modifier = Modifier.padding(12.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text(o.statusEnum.labelFa, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
                                 Text(formatTs(o.createdAt), style = MaterialTheme.typography.bodySmall)
+                            }
+                            if (o.source.isNotBlank()) {
+                                Text("منبع: ${if (o.source == "kitchen") "حضوری" else "آنلاین"}", style = MaterialTheme.typography.bodySmall)
                             }
                             o.items.forEach { Text("• ${it.foodName} × ${it.quantity}") }
                             Text(
@@ -199,9 +210,9 @@ fun HomeScreen(
                                             scope.launch {
                                                 if (ApiConfig.isConfigured)
                                                     ApiClient.updateOrderStatus(o.id, OrderStatus.PREPARING.key, byKitchen = true)
-                                                orders = if (ApiConfig.isConfigured)
-                                                    ApiClient.fetchOrders(customer!!.id)
-                                                else orders
+                                                val idx = AppRepository.orders.indexOfFirst { it.id == o.id }
+                                                if (idx >= 0) AppRepository.orders[idx] = AppRepository.orders[idx].copy(status = OrderStatus.PREPARING.key)
+                                                orders = orders.map { if (it.id == o.id) it.copy(status = OrderStatus.PREPARING.key) else it }
                                             }
                                         }) { Text("آماده‌سازی") }
                                     }
@@ -210,9 +221,9 @@ fun HomeScreen(
                                             scope.launch {
                                                 if (ApiConfig.isConfigured)
                                                     ApiClient.updateOrderStatus(o.id, OrderStatus.SHIPPED.key, byKitchen = true)
-                                                orders = if (ApiConfig.isConfigured)
-                                                    ApiClient.fetchOrders(customer!!.id)
-                                                else orders
+                                                val idx = AppRepository.orders.indexOfFirst { it.id == o.id }
+                                                if (idx >= 0) AppRepository.orders[idx] = AppRepository.orders[idx].copy(status = OrderStatus.SHIPPED.key)
+                                                orders = orders.map { if (it.id == o.id) it.copy(status = OrderStatus.SHIPPED.key) else it }
                                             }
                                         }) { Text("ارسال") }
                                     }
@@ -220,9 +231,9 @@ fun HomeScreen(
                                         scope.launch {
                                             if (ApiConfig.isConfigured)
                                                 ApiClient.updateOrderStatus(o.id, OrderStatus.DELIVERED.key, byKitchen = true)
-                                            orders = if (ApiConfig.isConfigured)
-                                                ApiClient.fetchOrders(customer!!.id)
-                                            else orders
+                                            val idx = AppRepository.orders.indexOfFirst { it.id == o.id }
+                                            if (idx >= 0) AppRepository.orders[idx] = AppRepository.orders[idx].copy(status = OrderStatus.DELIVERED.key)
+                                            orders = orders.map { if (it.id == o.id) it.copy(status = OrderStatus.DELIVERED.key) else it }
                                         }
                                     }) { Text("تحویل") }
                                 }
