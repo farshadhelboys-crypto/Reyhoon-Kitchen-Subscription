@@ -1,0 +1,14 @@
+name = "reyhoon-api"
+main = "src/index.js"
+compatibility_date = "2024-09-01"
+
+# بعد از ساخت KV در داشبورد کلادفلر، id را اینجا بگذارید:
+# [[kv_namespaces]]
+# binding = "STORE"
+# id = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+
+# اگر KV ندارید، Worker از حافظه موقت استفاده می‌کند (با ریست ممکن است پاک شود).
+# برای تولید حتماً KV وصل کنید.
+
+[vars]
+ADMIN_KEY = "reyhoon-admin-2024"
