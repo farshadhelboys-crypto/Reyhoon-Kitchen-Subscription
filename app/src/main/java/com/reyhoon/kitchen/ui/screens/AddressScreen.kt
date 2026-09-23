@@ -12,22 +12,25 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.reyhoon.kitchen.data.Address
-import com.reyhoon.kitchen.data.Subscription
+import com.reyhoon.kitchen.data.AppRepository
 import com.reyhoon.kitchen.ui.theme.GreenPrimary
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddressScreen(
-    subscription: Subscription,
-    onSave: (Address) -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    var street by remember { mutableStateOf(subscription.address.street) }
-    var city by remember { mutableStateOf(subscription.address.city) }
-    var postalCode by remember { mutableStateOf(subscription.address.postalCode) }
-    var phone by remember { mutableStateOf(subscription.address.phone) }
-    var notes by remember { mutableStateOf(subscription.address.notes) }
+    val customer = AppRepository.currentCustomer.value
+    if (customer == null) {
+        onBack()
+        return
+    }
+
+    var street by remember { mutableStateOf(customer.address.street) }
+    var city by remember { mutableStateOf(customer.address.city) }
+    var postalCode by remember { mutableStateOf(customer.address.postalCode) }
+    var notes by remember { mutableStateOf(customer.address.notes) }
 
     Scaffold(
         topBar = {
@@ -35,7 +38,7 @@ fun AddressScreen(
                 title = { Text("ویرایش آدرس", fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "بازگشت")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "بازگشت")
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -47,96 +50,65 @@ fun AddressScreen(
         },
         modifier = modifier
     ) { padding ->
-        BoxWithConstraints(
+        Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            val isWide = maxWidth >= 600.dp
-            val contentPadding = if (isWide) 32.dp else 16.dp
-            val maxFormWidth = if (isWide) 520.dp else maxWidth
+            OutlinedTextField(
+                value = street,
+                onValueChange = { street = it },
+                label = { Text("آدرس کامل") },
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                maxLines = 3
+            )
+            OutlinedTextField(
+                value = city,
+                onValueChange = { city = it },
+                label = { Text("شهر") },
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                singleLine = true
+            )
+            OutlinedTextField(
+                value = postalCode,
+                onValueChange = { postalCode = it },
+                label = { Text("کد پستی") },
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                singleLine = true
+            )
+            OutlinedTextField(
+                value = notes,
+                onValueChange = { notes = it },
+                label = { Text("یادداشت (اختیاری)") },
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                maxLines = 2
+            )
 
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .verticalScroll(rememberScrollState())
-                    .padding(contentPadding),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+            Button(
+                onClick = {
+                    val newAddr = Address(
+                        street = street.trim(),
+                        city = city.trim(),
+                        postalCode = postalCode.trim(),
+                        notes = notes.trim()
+                    )
+                    val updated = customer.copy(address = newAddr)
+                    AppRepository.updateCustomer(updated)
+                    AppRepository.currentCustomer.value = updated
+                    onBack()
+                },
+                modifier = Modifier.fillMaxWidth().height(50.dp),
+                shape = RoundedCornerShape(12.dp),
+                enabled = street.isNotBlank() && city.isNotBlank()
             ) {
-                Card(
-                    modifier = Modifier.widthIn(max = maxFormWidth).fillMaxWidth(),
-                    shape = RoundedCornerShape(16.dp)
-                ) {
-                    Column(
-                        modifier = Modifier.padding(20.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        OutlinedTextField(
-                            value = street,
-                            onValueChange = { street = it },
-                            label = { Text("آدرس کامل / خیابان") },
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(12.dp),
-                            singleLine = false,
-                            maxLines = 3
-                        )
-                        OutlinedTextField(
-                            value = city,
-                            onValueChange = { city = it },
-                            label = { Text("شهر") },
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(12.dp),
-                            singleLine = true
-                        )
-                        OutlinedTextField(
-                            value = postalCode,
-                            onValueChange = { postalCode = it },
-                            label = { Text("کد پستی") },
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(12.dp),
-                            singleLine = true
-                        )
-                        OutlinedTextField(
-                            value = phone,
-                            onValueChange = { phone = it },
-                            label = { Text("شماره تماس") },
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(12.dp),
-                            singleLine = true
-                        )
-                        OutlinedTextField(
-                            value = notes,
-                            onValueChange = { notes = it },
-                            label = { Text("یادداشت (اختیاری)") },
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(12.dp),
-                            singleLine = false,
-                            maxLines = 2
-                        )
-                    }
-                }
-
-                Button(
-                    onClick = {
-                        onSave(
-                            Address(
-                                street = street.trim(),
-                                city = city.trim(),
-                                postalCode = postalCode.trim(),
-                                phone = phone.trim(),
-                                notes = notes.trim()
-                            )
-                        )
-                    },
-                    modifier = Modifier
-                        .widthIn(max = maxFormWidth)
-                        .fillMaxWidth()
-                        .height(52.dp),
-                    shape = RoundedCornerShape(12.dp),
-                    enabled = street.isNotBlank() && city.isNotBlank() && phone.isNotBlank()
-                ) {
-                    Text("ذخیره آدرس", fontWeight = FontWeight.Medium)
-                }
+                Text("ذخیره آدرس")
             }
         }
     }

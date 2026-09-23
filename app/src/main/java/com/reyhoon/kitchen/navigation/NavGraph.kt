@@ -1,77 +1,93 @@
 package com.reyhoon.kitchen.navigation
 
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
-import com.reyhoon.kitchen.data.Address
-import com.reyhoon.kitchen.data.Subscription
-import com.reyhoon.kitchen.ui.screens.AddressScreen
-import com.reyhoon.kitchen.ui.screens.EnterCodeScreen
-import com.reyhoon.kitchen.ui.screens.HomeScreen
-import com.reyhoon.kitchen.ui.screens.MenuScreen
+import com.reyhoon.kitchen.data.AppRepository
+import com.reyhoon.kitchen.ui.screens.*
 
 object Routes {
-    const val ENTER_CODE = "enter_code"
+    const val ENTER = "enter"
     const val HOME = "home"
     const val MENU = "menu"
     const val ADDRESS = "address"
+    const val ADMIN = "admin"
+    const val ADMIN_MENU = "admin_menu"
+    const val ADMIN_CUSTOMERS = "admin_customers"
+    const val NEW_ORDER = "new_order"
 }
 
 @Composable
 fun ReyhoonNavGraph(modifier: Modifier = Modifier) {
     val navController = rememberNavController()
-    var currentSubscription by remember { mutableStateOf<Subscription?>(null) }
 
     NavHost(
         navController = navController,
-        startDestination = Routes.ENTER_CODE,
+        startDestination = Routes.ENTER,
         modifier = modifier
     ) {
-        composable(Routes.ENTER_CODE) {
+        composable(Routes.ENTER) {
             EnterCodeScreen(
-                onCodeVerified = { sub ->
-                    currentSubscription = sub
+                onCustomerEntered = {
                     navController.navigate(Routes.HOME) {
-                        popUpTo(Routes.ENTER_CODE) { inclusive = true }
+                        popUpTo(Routes.ENTER) { inclusive = true }
+                    }
+                },
+                onAdminEntered = {
+                    navController.navigate(Routes.ADMIN) {
+                        popUpTo(Routes.ENTER) { inclusive = true }
                     }
                 }
             )
         }
+
         composable(Routes.HOME) {
-            currentSubscription?.let { sub ->
-                HomeScreen(
-                    subscription = sub,
-                    onNavigateToMenu = { navController.navigate(Routes.MENU) },
-                    onNavigateToAddress = { navController.navigate(Routes.ADDRESS) },
-                    onLogout = {
-                        currentSubscription = null
-                        navController.navigate(Routes.ENTER_CODE) {
-                            popUpTo(0) { inclusive = true }
-                        }
+            HomeScreen(
+                onNavigateToMenu = { navController.navigate(Routes.MENU) },
+                onNavigateToAddress = { navController.navigate(Routes.ADDRESS) },
+                onLogout = {
+                    AppRepository.currentCustomer.value = null
+                    navController.navigate(Routes.ENTER) {
+                        popUpTo(0) { inclusive = true }
                     }
-                )
-            }
+                }
+            )
         }
+
         composable(Routes.MENU) {
             MenuScreen(onBack = { navController.popBackStack() })
         }
+
         composable(Routes.ADDRESS) {
-            currentSubscription?.let { sub ->
-                AddressScreen(
-                    subscription = sub,
-                    onSave = { newAddress: Address ->
-                        currentSubscription = sub.copy(address = newAddress)
-                        navController.popBackStack()
-                    },
-                    onBack = { navController.popBackStack() }
-                )
-            }
+            AddressScreen(onBack = { navController.popBackStack() })
+        }
+
+        composable(Routes.ADMIN) {
+            AdminDashboardScreen(
+                onNavigateToMenuManage = { navController.navigate(Routes.ADMIN_MENU) },
+                onNavigateToCustomers = { navController.navigate(Routes.ADMIN_CUSTOMERS) },
+                onNavigateToNewOrder = { navController.navigate(Routes.NEW_ORDER) },
+                onLogout = {
+                    AppRepository.isAdmin.value = false
+                    navController.navigate(Routes.ENTER) {
+                        popUpTo(0) { inclusive = true }
+                    }
+                }
+            )
+        }
+
+        composable(Routes.ADMIN_MENU) {
+            AdminMenuScreen(onBack = { navController.popBackStack() })
+        }
+
+        composable(Routes.ADMIN_CUSTOMERS) {
+            AdminCustomersScreen(onBack = { navController.popBackStack() })
+        }
+
+        composable(Routes.NEW_ORDER) {
+            NewOrderScreen(onBack = { navController.popBackStack() })
         }
     }
 }
