@@ -15,7 +15,6 @@ object AppRepository {
     val currentCustomer = mutableStateOf<Customer?>(null)
     val isAdmin = mutableStateOf(false)
 
-    // ---------- Menu ----------
     fun addFood(item: FoodItem) { menuItems.add(item) }
 
     fun updateFood(item: FoodItem) {
@@ -29,8 +28,10 @@ object AppRepository {
         return menuItems.filter { it.isAvailable }.groupBy { it.category }
     }
 
-    // ---------- Customers ----------
-    fun addCustomer(customer: Customer) { customers.add(customer) }
+    fun addCustomer(customer: Customer) {
+        val idx = customers.indexOfFirst { it.id == customer.id }
+        if (idx >= 0) customers[idx] = customer else customers.add(customer)
+    }
 
     fun updateCustomer(customer: Customer) {
         val idx = customers.indexOfFirst { it.id == customer.id }
@@ -51,20 +52,10 @@ object AppRepository {
         }
     }
 
-    /** محاسبه مجدد بدهی مشتری از روی سفارش‌های پرداخت‌نشده */
     fun recalculateDebt(customerId: String): Long {
-        return orders
-            .filter { it.customerId == customerId }
-            .sumOf { it.remaining }
+        return orders.filter { it.customerId == customerId }.sumOf { it.remaining }
     }
 
-    // ---------- Orders & Accounting ----------
-    /**
-     * ثبت سفارش با پشتیبانی از:
-     * - کسر اعتبار قبلی مشتری از مبلغ غذا
-     * - پرداخت بیشتر از مبلغ → تبدیل به اعتبار برای سفارش بعدی
-     * - پرداخت کمتر → بدهی
-     */
     fun createOrder(
         customer: Customer,
         items: List<OrderItem>,
@@ -75,35 +66,30 @@ object AppRepository {
         var credit = customer.credit
         var debt = customer.debt
 
-        // ۱) اعتبار قبلی را از مبلغ سفارش کسر کن
         val creditApplied = minOf(credit, total)
         credit -= creditApplied
         val afterCredit = total - creditApplied
 
-        // ۲) پرداخت نقدی
         val cashUsed = minOf(paidNow.coerceAtLeast(0), afterCredit)
         val overpay = (paidNow.coerceAtLeast(0) - afterCredit).coerceAtLeast(0)
 
-        // اضافه‌پرداخت → اعتبار جدید
-        if (overpay > 0) {
-            credit += overpay
-        }
+        if (overpay > 0) credit += overpay
 
-        // کمبود پرداخت → بدهی
         val shortfall = afterCredit - cashUsed
-        if (shortfall > 0) {
-            debt += shortfall
-        }
+        if (shortfall > 0) debt += shortfall
 
         val paidOnOrder = creditApplied + cashUsed
 
         val order = Order(
             customerId = customer.id,
             customerName = customer.name,
+            customerPhone = customer.phone,
+            customerAddress = customer.address.fullAddress(),
             items = items,
             totalAmount = total,
             paidAmount = paidOnOrder,
             creditApplied = creditApplied,
+            source = "kitchen",
             note = buildString {
                 if (note.isNotBlank()) append(note)
                 if (creditApplied > 0) {
@@ -159,12 +145,6 @@ object AppRepository {
         return OrderResult(order, creditApplied, credit, debt, message)
     }
 
-    /**
-     * تسویه بدهی:
-     * - ابتدا روی سفارش‌های پرداخت‌نشده (قدیمی‌تر اول) اعمال می‌شود
-     * - در نتیجه «بدهی دوره» هم کم می‌شود
-     * - اگر مبلغ بیشتر از بدهی باشد → اعتبار مشتری افزایش می‌یابد
-     */
     fun recordPayment(customerId: String, amount: Long, orderId: String? = null, note: String = "") {
         if (amount <= 0) return
         val customer = findCustomer(customerId) ?: return
@@ -190,7 +170,6 @@ object AppRepository {
                 }
             }
         } else {
-            // اعمال روی همه سفارش‌های باز (از قدیمی به جدید)
             val openOrders = orders
                 .mapIndexed { index, order -> index to order }
                 .filter { it.second.customerId == customerId && it.second.remaining > 0 }
@@ -204,16 +183,13 @@ object AppRepository {
             }
         }
 
-        // بدهی = مجموع remaining سفارش‌ها
         val newDebt = recalculateDebt(customerId)
-        // باقی‌مانده پرداخت → اعتبار
         val newCredit = customer.credit + remainingPay
 
         updateCustomer(customer.copy(debt = newDebt, credit = newCredit))
         syncCurrentCustomer(customerId)
     }
 
-    // ---------- Reports ----------
     fun getSalesSummary(period: String): SalesSummary {
         val now = System.currentTimeMillis()
         val cal = Calendar.getInstance()
@@ -254,5 +230,14 @@ object AppRepository {
 
     fun formatPrice(price: Long): String {
         return "%,d".format(price).replace(',', '٬')
+    }
+
+    /** تولید کد ۶ رقمی یکتا محلی */
+    fun generateLocalCode(): String {
+        var code: String
+        do {
+            code = (100000 + (Math.random() * 900000).toInt()).toString()
+        } while (customers.any { it.subscriptionCode == code })
+        return code
     }
 }

@@ -45,7 +45,6 @@ data class OrderItem(
     val total: Long get() = unitPrice * quantity
 }
 
-/** وضعیت سفارش در کل سیستم */
 enum class OrderStatus(val key: String, val labelFa: String) {
     REGISTERED("registered", "سفارش ثبت شد"),
     PREPARING("preparing", "در حال آماده‌سازی"),
@@ -63,6 +62,7 @@ data class Order(
     val customerId: String,
     val customerName: String,
     val customerPhone: String = "",
+    val customerAddress: String = "",
     val items: List<OrderItem>,
     val totalAmount: Long,
     val paidAmount: Long = 0L,
@@ -74,7 +74,8 @@ data class Order(
     val deliveredAt: Long? = null,
     val deliveredByCustomer: Boolean = false,
     val deliveredByKitchen: Boolean = false,
-    val note: String = ""
+    val note: String = "",
+    val source: String = ""
 ) {
     val remaining: Long get() = (totalAmount - paidAmount).coerceAtLeast(0)
     val isFullyPaid: Boolean get() = remaining == 0L
