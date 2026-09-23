@@ -1,5 +1,5 @@
 /**
- * Reyhoon API - سازگار با ادیتور داشبورد کلادفلر (بدون export)
+ * Reyhoon API - Service Worker format + UTF-8 safe Persian (\\u escapes)
  */
 
 var CORS = {
@@ -81,12 +81,10 @@ async function handleRequest(request) {
       return json({ ok: true, service: "reyhoon-api", ts: Date.now() });
     }
 
-    // Menu GET
     if (path === "/api/menu" && request.method === "GET") {
       return json(await load(env, "menu"));
     }
 
-    // Menu POST
     if (path === "/api/menu" && request.method === "POST") {
       if (!isAdmin(request, env)) return json({ error: "unauthorized" }, 401);
       var body = await request.json();
@@ -96,7 +94,7 @@ async function handleRequest(request) {
         name: body.name || "",
         description: body.description || "",
         price: Number(body.price) || 0,
-        category: body.category || "عمومی",
+        category: body.category || "\u0639\u0645\u0648\u0645\u06cc",
         isAvailable: body.isAvailable !== false
       };
       menu.push(item);
@@ -104,7 +102,6 @@ async function handleRequest(request) {
       return json(item, 201);
     }
 
-    // Menu PUT
     if (path.indexOf("/api/menu/") === 0 && request.method === "PUT") {
       if (!isAdmin(request, env)) return json({ error: "unauthorized" }, 401);
       var id = path.split("/").pop();
@@ -117,7 +114,6 @@ async function handleRequest(request) {
       return json(menu[i]);
     }
 
-    // Menu DELETE
     if (path.indexOf("/api/menu/") === 0 && request.method === "DELETE") {
       if (!isAdmin(request, env)) return json({ error: "unauthorized" }, 401);
       id = path.split("/").pop();
@@ -127,13 +123,11 @@ async function handleRequest(request) {
       return json({ ok: true });
     }
 
-    // Customers GET
     if (path === "/api/customers" && request.method === "GET") {
       if (!isAdmin(request, env)) return json({ error: "unauthorized" }, 401);
       return json(await load(env, "customers"));
     }
 
-    // Customers POST
     if (path === "/api/customers" && request.method === "POST") {
       if (!isAdmin(request, env)) return json({ error: "unauthorized" }, 401);
       body = await request.json();
@@ -154,7 +148,6 @@ async function handleRequest(request) {
       return json(c, 201);
     }
 
-    // Customer by code
     if (path.indexOf("/api/customers/code/") === 0 && request.method === "GET") {
       var code = decodeURIComponent(path.split("/").pop());
       customers = await load(env, "customers");
@@ -165,7 +158,6 @@ async function handleRequest(request) {
       return json(c);
     }
 
-    // Customer PUT
     if (path.indexOf("/api/customers/") === 0 && path.indexOf("/code/") < 0 && request.method === "PUT") {
       if (!isAdmin(request, env)) return json({ error: "unauthorized" }, 401);
       id = path.split("/").pop();
@@ -178,7 +170,6 @@ async function handleRequest(request) {
       return json(customers[i]);
     }
 
-    // Customer DELETE
     if (path.indexOf("/api/customers/") === 0 && path.indexOf("/code/") < 0 && request.method === "DELETE") {
       if (!isAdmin(request, env)) return json({ error: "unauthorized" }, 401);
       id = path.split("/").pop();
@@ -188,7 +179,6 @@ async function handleRequest(request) {
       return json({ ok: true });
     }
 
-    // Orders GET
     if (path === "/api/orders" && request.method === "GET") {
       var customerId = url.searchParams.get("customerId");
       var statusFilter = url.searchParams.get("status");
@@ -199,7 +189,6 @@ async function handleRequest(request) {
       return json(orders);
     }
 
-    // Orders POST
     if (path === "/api/orders" && request.method === "POST") {
       body = await request.json();
       customers = await load(env, "customers");
@@ -250,7 +239,6 @@ async function handleRequest(request) {
       return json({ order: order, customer: customers[ci] }, 201);
     }
 
-    // Order status PATCH
     if (/^\/api\/orders\/[^/]+\/status$/.test(path) && request.method === "PATCH") {
       id = path.split("/")[3];
       body = await request.json();
@@ -275,7 +263,6 @@ async function handleRequest(request) {
       return json(o);
     }
 
-    // New orders for alarm
     if (path === "/api/orders/new-count" && request.method === "GET") {
       var since = Number(url.searchParams.get("since") || 0);
       orders = await load(env, "orders");
@@ -285,7 +272,6 @@ async function handleRequest(request) {
       return json({ count: list.length, orders: list });
     }
 
-    // Payments POST
     if (path === "/api/payments" && request.method === "POST") {
       if (!isAdmin(request, env)) return json({ error: "unauthorized" }, 401);
       body = await request.json();
@@ -330,7 +316,7 @@ async function handleRequest(request) {
         id: uid(),
         customerId: body.customerId,
         amount: amount,
-        note: body.note || "تسویه",
+        note: body.note || "",
         createdAt: Date.now()
       };
       payments.unshift(p);
@@ -345,91 +331,124 @@ async function handleRequest(request) {
   }
 }
 
+/* Persian via \u so file stays ASCII-safe in CF editor */
 function adminHtml() {
-  return "<!DOCTYPE html>\n" +
-"<html lang=\"fa\" dir=\"rtl\">\n" +
-"<head>\n" +
-"<meta charset=\"utf-8\"/>\n" +
-"<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"/>\n" +
-"<title>پنل ادمین ریحون</title>\n" +
-"<style>\n" +
-":root{--g:#2E7D32;--g2:#1B5E20;--bg:#F1F8E9;--card:#fff;--t:#0A0A0A;--muted:#3D5C40;--err:#C62828;--ok:#2E7D32}\n" +
-"*{box-sizing:border-box}body{margin:0;font-family:Tahoma,Segoe UI,sans-serif;background:var(--bg);color:var(--t);font-size:16px}\n" +
-"header{background:linear-gradient(135deg,var(--g2),var(--g));color:#fff;padding:16px 20px}\n" +
-"header h1{margin:0;font-size:1.35rem}.wrap{max-width:960px;margin:0 auto;padding:16px}\n" +
-".card{background:var(--card);border-radius:14px;padding:16px;margin-bottom:16px;box-shadow:0 2px 10px rgba(0,0,0,.08)}\n" +
-"label{display:block;font-weight:700;margin:8px 0 4px}\n" +
-"input{width:100%;padding:10px 12px;border:1px solid #c5d6c7;border-radius:10px;font-size:1rem}\n" +
-"button{cursor:pointer;border:none;border-radius:10px;padding:10px 16px;font-size:1rem;font-weight:700}\n" +
-".btn{background:var(--g);color:#fff}.btn-danger{background:var(--err);color:#fff}\n" +
-".btn-outline{background:#fff;border:2px solid var(--g);color:var(--g)}\n" +
-".row{display:flex;flex-wrap:wrap;gap:10px}.row>*{flex:1;min-width:140px}\n" +
-"table{width:100%;border-collapse:collapse}th,td{text-align:right;padding:10px 8px;border-bottom:1px solid #e0e0e0}\n" +
-"th{background:#E8F5E9}.tabs{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap}\n" +
-".tab{background:#fff;border:2px solid var(--g);color:var(--g)}.tab.active{background:var(--g);color:#fff}\n" +
-".msg{padding:10px;border-radius:8px;margin:8px 0;display:none}\n" +
-".msg.ok{display:block;background:#E8F5E9;color:var(--ok)}.msg.err{display:block;background:#FFEBEE;color:var(--err)}\n" +
-".login-box{max-width:400px;margin:40px auto}.price{color:#E65100;font-weight:700}\n" +
-".badge{display:inline-block;padding:2px 8px;border-radius:8px;background:#E8F5E9;font-size:.85rem}\n" +
-"</style></head><body>\n" +
-"<header><h1>پنل ادمین آشپزخانه ریحون</h1><span id=\"hdrStatus\"></span></header>\n" +
-"<div class=\"wrap\">\n" +
-"<div id=\"loginView\" class=\"card login-box\">\n" +
-"<h2>ورود ادمین</h2>\n" +
-"<p style=\"color:var(--muted)\">کلید پیش‌فرض: reyhoon-admin-2024</p>\n" +
-"<label>کلید ادمین</label>\n" +
-"<input id=\"adminKey\" type=\"password\"/>\n" +
-"<div style=\"margin-top:12px\"><button class=\"btn\" onclick=\"doLogin()\">ورود</button></div>\n" +
-"<div id=\"loginMsg\" class=\"msg\"></div></div>\n" +
-"<div id=\"appView\" style=\"display:none\">\n" +
-"<div class=\"tabs\">\n" +
-"<button class=\"tab active\" data-tab=\"menu\" onclick=\"showTab('menu')\">منوی غذا</button>\n" +
-"<button class=\"tab\" data-tab=\"orders\" onclick=\"showTab('orders')\">سفارش‌ها</button>\n" +
-"<button class=\"tab\" data-tab=\"customers\" onclick=\"showTab('customers')\">مشتریان</button>\n" +
-"</div><div id=\"flash\" class=\"msg\"></div>\n" +
-"<div id=\"tab-menu\">\n" +
-"<div class=\"card\"><h3>افزودن / ویرایش غذا</h3>\n" +
-"<input type=\"hidden\" id=\"foodId\"/>\n" +
-"<div class=\"row\"><div><label>نام غذا</label><input id=\"foodName\"/></div>\n" +
-"<div><label>قیمت (تومان)</label><input id=\"foodPrice\" type=\"number\"/></div></div>\n" +
-"<div class=\"row\"><div><label>دسته</label><input id=\"foodCat\" value=\"عمومی\"/></div>\n" +
-"<div><label>توضیح</label><input id=\"foodDesc\"/></div></div>\n" +
-"<div style=\"margin-top:12px\" class=\"row\">\n" +
-"<button class=\"btn\" onclick=\"saveFood()\">ذخیره در منو</button>\n" +
-"<button class=\"btn-outline\" onclick=\"clearFoodForm()\">پاک کردن فرم</button></div></div>\n" +
-"<div class=\"card\"><h3>لیست منو <button class=\"btn-outline\" style=\"float:left\" onclick=\"loadMenu()\">بروزرسانی</button></h3>\n" +
-"<div style=\"overflow-x:auto\"><table><thead><tr><th>نام</th><th>قیمت</th><th>دسته</th><th>عملیات</th></tr></thead>\n" +
-"<tbody id=\"menuBody\"></tbody></table></div></div></div>\n" +
-"<div id=\"tab-orders\" style=\"display:none\"><div class=\"card\">\n" +
-"<h3>سفارش‌ها <button class=\"btn-outline\" style=\"float:left\" onclick=\"loadOrders()\">بروزرسانی</button></h3>\n" +
-"<div id=\"ordersList\"></div></div></div>\n" +
-"<div id=\"tab-customers\" style=\"display:none\">\n" +
-"<div class=\"card\"><h3>افزودن مشتری</h3>\n" +
-"<div class=\"row\"><div><label>نام</label><input id=\"cName\"/></div><div><label>تلفن</label><input id=\"cPhone\"/></div></div>\n" +
-"<div class=\"row\"><div><label>کد اشتراک</label><input id=\"cCode\"/></div><div><label>آدرس</label><input id=\"cStreet\"/></div></div>\n" +
-"<div class=\"row\"><div><label>شهر</label><input id=\"cCity\"/></div>\n" +
-"<div style=\"display:flex;align-items:flex-end\"><button class=\"btn\" onclick=\"addCustomer()\">ثبت مشتری</button></div></div></div>\n" +
-"<div class=\"card\"><h3>لیست مشتریان <button class=\"btn-outline\" style=\"float:left\" onclick=\"loadCustomers()\">بروزرسانی</button></h3>\n" +
-"<div id=\"custList\"></div></div></div></div></div>\n" +
-"<script>\n" +
-"var API=location.origin;var KEY=localStorage.getItem('reyhoon_admin_key')||'';\n" +
-"function headers(j){var h={'X-Admin-Key':KEY};if(j)h['Content-Type']='application/json';return h}\n" +
-"function flash(m,ok){var el=document.getElementById('flash');el.className='msg '+(ok?'ok':'err');el.textContent=m;setTimeout(function(){el.className='msg'},4000)}\n" +
-"function fmt(n){return Number(n||0).toLocaleString('fa-IR')}\n" +
-"function fmtTime(ts){if(!ts)return '—';return new Date(ts).toLocaleString('fa-IR')}\n" +
-"var statusFa={registered:'ثبت شد',preparing:'آماده\\u200cسازی',shipped:'ارسال شده',delivered:'تحویل داده شد'};\n" +
-"async function doLogin(){KEY=document.getElementById('adminKey').value.trim();try{var r2=await fetch(API+'/api/customers',{headers:headers()});if(r2.status===401)throw new Error('کلید اشتباه');localStorage.setItem('reyhoon_admin_key',KEY);document.getElementById('loginView').style.display='none';document.getElementById('appView').style.display='block';document.getElementById('hdrStatus').textContent='متصل';loadMenu();loadOrders();loadCustomers()}catch(e){var m=document.getElementById('loginMsg');m.className='msg err';m.textContent=e.message}}\n" +
-"if(KEY){document.getElementById('adminKey').value=KEY;doLogin()}\n" +
-"function showTab(name){['menu','orders','customers'].forEach(function(t){document.getElementById('tab-'+t).style.display=t===name?'block':'none'});document.querySelectorAll('.tab').forEach(function(b){b.classList.toggle('active',b.dataset.tab===name)})}\n" +
-"function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/\"/g,'&quot;')}\n" +
-"async function loadMenu(){var r=await fetch(API+'/api/menu');var list=await r.json();var tb=document.getElementById('menuBody');tb.innerHTML=list.map(function(f){return '<tr><td><b>'+esc(f.name)+'</b></td><td class=\"price\">'+fmt(f.price)+'</td><td><span class=\"badge\">'+esc(f.category||'')+'</span></td><td><button class=\"btn-outline\" onclick=\'editFood('+JSON.stringify(f)+')\'>ویرایش</button> <button class=\"btn-danger\" onclick=\"delFood(\\''+f.id+'\\')\">حذف</button></td></tr>'}).join('')||'<tr><td colspan=\"4\">منو خالی</td></tr>'}\n" +
-"function clearFoodForm(){foodId.value='';foodName.value='';foodPrice.value='';foodCat.value='عمومی';foodDesc.value=''}\n" +
-"function editFood(f){foodId.value=f.id;foodName.value=f.name;foodPrice.value=f.price;foodCat.value=f.category||'عمومی';foodDesc.value=f.description||''}\n" +
-"async function saveFood(){var id=foodId.value;var body={name:foodName.value.trim(),price:Number(foodPrice.value)||0,category:foodCat.value.trim()||'عمومی',description:foodDesc.value.trim(),isAvailable:true};if(!body.name)return flash('نام لازم است',false);var r=await fetch(API+(id?'/api/menu/'+id:'/api/menu'),{method:id?'PUT':'POST',headers:headers(true),body:JSON.stringify(body)});if(!r.ok)return flash('خطا',false);flash('ذخیره شد — در اپ‌ها اعمال می‌شود',true);clearFoodForm();loadMenu()}\n" +
-"async function delFood(id){if(!confirm('حذف؟'))return;await fetch(API+'/api/menu/'+id,{method:'DELETE',headers:headers()});flash('حذف شد',true);loadMenu()}\n" +
-"async function loadOrders(){var r=await fetch(API+'/api/orders');var list=await r.json();document.getElementById('ordersList').innerHTML=list.map(function(o){return '<div style=\"border:1px solid #e0e0e0;border-radius:12px;padding:12px;margin-bottom:10px\"><b>'+esc(o.customerName)+'</b> — <span class=\"badge\">'+(statusFa[o.status]||o.status)+'</span><br/><small>ثبت: '+fmtTime(o.createdAt)+(o.deliveredAt?' | تحویل: '+fmtTime(o.deliveredAt):'')+'</small><br/>'+(o.items||[]).map(function(i){return esc(i.foodName)+' ×'+i.quantity}).join('، ')+'<br/><span class=\"price\">'+fmt(o.totalAmount)+' تومان</span><div class=\"row\" style=\"margin-top:8px\"><button class=\"btn-outline\" onclick=\"setStatus(\\''+o.id+'\\',\\'preparing\\')\">آماده\\u200cسازی</button><button class=\"btn-outline\" onclick=\"setStatus(\\''+o.id+'\\',\\'shipped\\')\">ارسال</button><button class=\"btn\" onclick=\"setStatus(\\''+o.id+'\\',\\'delivered\\')\">تحویل</button></div></div>'}).join('')||'<p>سفارشی نیست</p>'}\n" +
-"async function setStatus(id,status){await fetch(API+'/api/orders/'+id+'/status',{method:'PATCH',headers:headers(true),body:JSON.stringify({status:status,byKitchen:true})});flash('وضعیت به‌روز شد',true);loadOrders()}\n" +
-"async function loadCustomers(){var r=await fetch(API+'/api/customers',{headers:headers()});if(!r.ok)return;var list=await r.json();document.getElementById('custList').innerHTML=list.map(function(c){return '<div style=\"border-bottom:1px solid #eee;padding:10px 0\"><b>'+esc(c.name)+'</b> — '+esc(c.phone)+' — کد: <b>'+esc(c.subscriptionCode||'—')+'</b><br/><small>'+esc((c.address&&c.address.street)||'')+' '+esc((c.address&&c.address.city)||'')+'</small><br/>بدهی: <span style=\"color:var(--err)\">'+fmt(c.debt)+'</span> | اعتبار: <span style=\"color:var(--ok)\">'+fmt(c.credit)+'</span></div>'}).join('')||'<p>مشتری نیست</p>'}\n" +
-"async function addCustomer(){var body={name:cName.value.trim(),phone:cPhone.value.trim(),subscriptionCode:cCode.value.trim()||null,address:{street:cStreet.value.trim(),city:cCity.value.trim(),postalCode:'',notes:''}};if(!body.name||!body.phone)return flash('نام و تلفن لازم است',false);var r=await fetch(API+'/api/customers',{method:'POST',headers:headers(true),body:JSON.stringify(body)});if(!r.ok)return flash('خطا',false);flash('مشتری اضافه شد',true);cName.value=cPhone.value=cCode.value=cStreet.value=cCity.value='';loadCustomers()}\n" +
-"</scr"+"ipt></body></html>";
+  var t = {
+    title: "\u067e\u0646\u0644 \u0627\u062f\u0645\u06cc\u0646 \u0631\u06cc\u062d\u0648\u0646",
+    h1: "\u067e\u0646\u0644 \u0627\u062f\u0645\u06cc\u0646 \u0622\u0634\u067e\u0632\u062e\u0627\u0646\u0647 \u0631\u06cc\u062d\u0648\u0646",
+    login: "\u0648\u0631\u0648\u062f \u0627\u062f\u0645\u06cc\u0646",
+    keyHint: "\u06a9\u0644\u06cc\u062f \u067e\u06cc\u0634\u200c\u0641\u0631\u0636: reyhoon-admin-2024",
+    keyLabel: "\u06a9\u0644\u06cc\u062f \u0627\u062f\u0645\u06cc\u0646",
+    enter: "\u0648\u0631\u0648\u062f",
+    tabMenu: "\u0645\u0646\u0648\u06cc \u063a\u0630\u0627",
+    tabOrders: "\u0633\u0641\u0627\u0631\u0634\u200c\u0647\u0627",
+    tabCust: "\u0645\u0634\u062a\u0631\u06cc\u0627\u0646",
+    addFood: "\u0627\u0641\u0632\u0648\u062f\u0646 / \u0648\u06cc\u0631\u0627\u06cc\u0634 \u063a\u0630\u0627",
+    name: "\u0646\u0627\u0645 \u063a\u0630\u0627",
+    price: "\u0642\u06cc\u0645\u062a (\u062a\u0648\u0645\u0627\u0646)",
+    cat: "\u062f\u0633\u062a\u0647",
+    desc: "\u062a\u0648\u0636\u06cc\u062d",
+    save: "\u0630\u062e\u06cc\u0631\u0647 \u062f\u0631 \u0645\u0646\u0648",
+    clear: "\u067e\u0627\u06a9 \u06a9\u0631\u062f\u0646 \u0641\u0631\u0645",
+    menuList: "\u0644\u06cc\u0633\u062a \u0645\u0646\u0648",
+    refresh: "\u0628\u0631\u0648\u0632\u0631\u0633\u0627\u0646\u06cc",
+    colName: "\u0646\u0627\u0645",
+    colPrice: "\u0642\u06cc\u0645\u062a",
+    colCat: "\u062f\u0633\u062a\u0647",
+    colAct: "\u0639\u0645\u0644\u06cc\u0627\u062a",
+    orders: "\u0633\u0641\u0627\u0631\u0634\u200c\u0647\u0627",
+    addCust: "\u0627\u0641\u0632\u0648\u062f\u0646 \u0645\u0634\u062a\u0631\u06cc",
+    cName: "\u0646\u0627\u0645",
+    cPhone: "\u062a\u0644\u0641\u0646",
+    cCode: "\u06a9\u062f \u0627\u0634\u062a\u0631\u0627\u06a9",
+    cAddr: "\u0622\u062f\u0631\u0633",
+    cCity: "\u0634\u0647\u0631",
+    saveCust: "\u062b\u0628\u062a \u0645\u0634\u062a\u0631\u06cc",
+    custList: "\u0644\u06cc\u0633\u062a \u0645\u0634\u062a\u0631\u06cc\u0627\u0646",
+    gen: "\u0639\u0645\u0648\u0645\u06cc"
+  };
+
+  return "<!DOCTYPE html>\n<html lang=\"fa\" dir=\"rtl\">\n<head>\n" +
+    "<meta charset=\"utf-8\"/>\n" +
+    "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"/>\n" +
+    "<title>" + t.title + "</title>\n<style>\n" +
+    ":root{--g:#2E7D32;--g2:#1B5E20;--bg:#F1F8E9;--card:#fff;--t:#0A0A0A;--muted:#3D5C40;--err:#C62828;--ok:#2E7D32}\n" +
+    "*{box-sizing:border-box}body{margin:0;font-family:Tahoma,'Segoe UI',sans-serif;background:var(--bg);color:var(--t);font-size:16px}\n" +
+    "header{background:linear-gradient(135deg,var(--g2),var(--g));color:#fff;padding:16px 20px}\n" +
+    "header h1{margin:0;font-size:1.35rem}.wrap{max-width:960px;margin:0 auto;padding:16px}\n" +
+    ".card{background:var(--card);border-radius:14px;padding:16px;margin-bottom:16px;box-shadow:0 2px 10px rgba(0,0,0,.08)}\n" +
+    "label{display:block;font-weight:700;margin:8px 0 4px}\n" +
+    "input{width:100%;padding:10px 12px;border:1px solid #c5d6c7;border-radius:10px;font-size:1rem}\n" +
+    "button{cursor:pointer;border:none;border-radius:10px;padding:10px 16px;font-size:1rem;font-weight:700}\n" +
+    ".btn{background:var(--g);color:#fff}.btn-danger{background:var(--err);color:#fff}\n" +
+    ".btn-outline{background:#fff;border:2px solid var(--g);color:var(--g)}\n" +
+    ".row{display:flex;flex-wrap:wrap;gap:10px}.row>*{flex:1;min-width:140px}\n" +
+    "table{width:100%;border-collapse:collapse}th,td{text-align:right;padding:10px 8px;border-bottom:1px solid #e0e0e0}\n" +
+    "th{background:#E8F5E9}.tabs{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap}\n" +
+    ".tab{background:#fff;border:2px solid var(--g);color:var(--g)}.tab.active{background:var(--g);color:#fff}\n" +
+    ".msg{padding:10px;border-radius:8px;margin:8px 0;display:none}\n" +
+    ".msg.ok{display:block;background:#E8F5E9;color:var(--ok)}.msg.err{display:block;background:#FFEBEE;color:var(--err)}\n" +
+    ".login-box{max-width:400px;margin:40px auto}.price{color:#E65100;font-weight:700}\n" +
+    ".badge{display:inline-block;padding:2px 8px;border-radius:8px;background:#E8F5E9;font-size:.85rem}\n" +
+    "</style></head><body>\n" +
+    "<header><h1>" + t.h1 + "</h1><span id=\"hdrStatus\"></span></header>\n" +
+    "<div class=\"wrap\">\n" +
+    "<div id=\"loginView\" class=\"card login-box\">\n" +
+    "<h2>" + t.login + "</h2>\n" +
+    "<p style=\"color:var(--muted)\">" + t.keyHint + "</p>\n" +
+    "<label>" + t.keyLabel + "</label>\n" +
+    "<input id=\"adminKey\" type=\"password\"/>\n" +
+    "<div style=\"margin-top:12px\"><button class=\"btn\" onclick=\"doLogin()\">" + t.enter + "</button></div>\n" +
+    "<div id=\"loginMsg\" class=\"msg\"></div></div>\n" +
+    "<div id=\"appView\" style=\"display:none\">\n" +
+    "<div class=\"tabs\">\n" +
+    "<button class=\"tab active\" data-tab=\"menu\" onclick=\"showTab('menu')\">" + t.tabMenu + "</button>\n" +
+    "<button class=\"tab\" data-tab=\"orders\" onclick=\"showTab('orders')\">" + t.tabOrders + "</button>\n" +
+    "<button class=\"tab\" data-tab=\"customers\" onclick=\"showTab('customers')\">" + t.tabCust + "</button>\n" +
+    "</div><div id=\"flash\" class=\"msg\"></div>\n" +
+    "<div id=\"tab-menu\">\n" +
+    "<div class=\"card\"><h3>" + t.addFood + "</h3>\n" +
+    "<input type=\"hidden\" id=\"foodId\"/>\n" +
+    "<div class=\"row\"><div><label>" + t.name + "</label><input id=\"foodName\"/></div>\n" +
+    "<div><label>" + t.price + "</label><input id=\"foodPrice\" type=\"number\"/></div></div>\n" +
+    "<div class=\"row\"><div><label>" + t.cat + "</label><input id=\"foodCat\" value=\"" + t.gen + "\"/></div>\n" +
+    "<div><label>" + t.desc + "</label><input id=\"foodDesc\"/></div></div>\n" +
+    "<div style=\"margin-top:12px\" class=\"row\">\n" +
+    "<button class=\"btn\" onclick=\"saveFood()\">" + t.save + "</button>\n" +
+    "<button class=\"btn-outline\" onclick=\"clearFoodForm()\">" + t.clear + "</button></div></div>\n" +
+    "<div class=\"card\"><h3>" + t.menuList + " <button class=\"btn-outline\" style=\"float:left\" onclick=\"loadMenu()\">" + t.refresh + "</button></h3>\n" +
+    "<div style=\"overflow-x:auto\"><table><thead><tr><th>" + t.colName + "</th><th>" + t.colPrice + "</th><th>" + t.colCat + "</th><th>" + t.colAct + "</th></tr></thead>\n" +
+    "<tbody id=\"menuBody\"></tbody></table></div></div></div>\n" +
+    "<div id=\"tab-orders\" style=\"display:none\"><div class=\"card\">\n" +
+    "<h3>" + t.orders + " <button class=\"btn-outline\" style=\"float:left\" onclick=\"loadOrders()\">" + t.refresh + "</button></h3>\n" +
+    "<div id=\"ordersList\"></div></div></div>\n" +
+    "<div id=\"tab-customers\" style=\"display:none\">\n" +
+    "<div class=\"card\"><h3>" + t.addCust + "</h3>\n" +
+    "<div class=\"row\"><div><label>" + t.cName + "</label><input id=\"cName\"/></div><div><label>" + t.cPhone + "</label><input id=\"cPhone\"/></div></div>\n" +
+    "<div class=\"row\"><div><label>" + t.cCode + "</label><input id=\"cCode\"/></div><div><label>" + t.cAddr + "</label><input id=\"cStreet\"/></div></div>\n" +
+    "<div class=\"row\"><div><label>" + t.cCity + "</label><input id=\"cCity\"/></div>\n" +
+    "<div style=\"display:flex;align-items:flex-end\"><button class=\"btn\" onclick=\"addCustomer()\">" + t.saveCust + "</button></div></div></div>\n" +
+    "<div class=\"card\"><h3>" + t.custList + " <button class=\"btn-outline\" style=\"float:left\" onclick=\"loadCustomers()\">" + t.refresh + "</button></h3>\n" +
+    "<div id=\"custList\"></div></div></div></div></div>\n" +
+    "<script>\n" +
+    "var API=location.origin;var KEY=localStorage.getItem('reyhoon_admin_key')||'';\n" +
+    "function headers(j){var h={'X-Admin-Key':KEY};if(j)h['Content-Type']='application/json';return h}\n" +
+    "function flash(m,ok){var el=document.getElementById('flash');el.className='msg '+(ok?'ok':'err');el.textContent=m;setTimeout(function(){el.className='msg'},4000)}\n" +
+    "function fmt(n){return Number(n||0).toLocaleString('fa-IR')}\n" +
+    "function fmtTime(ts){if(!ts)return '-';return new Date(ts).toLocaleString('fa-IR')}\n" +
+    "var statusFa={registered:'\u0633\u0641\u0627\u0631\u0634 \u062b\u0628\u062a \u0634\u062f',preparing:'\u062f\u0631 \u062d\u0627\u0644 \u0622\u0645\u0627\u062f\u0647\u200c\u0633\u0627\u0632\u06cc',shipped:'\u0627\u0631\u0633\u0627\u0644 \u0634\u062f\u0647',delivered:'\u062a\u062d\u0648\u06cc\u0644 \u062f\u0627\u062f\u0647 \u0634\u062f'};\n" +
+    "async function doLogin(){KEY=document.getElementById('adminKey').value.trim();try{var r2=await fetch(API+'/api/customers',{headers:headers()});if(r2.status===401)throw new Error('\u06a9\u0644\u06cc\u062f \u0627\u0634\u062a\u0628\u0627\u0647');localStorage.setItem('reyhoon_admin_key',KEY);document.getElementById('loginView').style.display='none';document.getElementById('appView').style.display='block';document.getElementById('hdrStatus').textContent='\u0645\u062a\u0635\u0644';loadMenu();loadOrders();loadCustomers()}catch(e){var m=document.getElementById('loginMsg');m.className='msg err';m.textContent=e.message}}\n" +
+    "if(KEY){document.getElementById('adminKey').value=KEY;doLogin()}\n" +
+    "function showTab(name){['menu','orders','customers'].forEach(function(t){document.getElementById('tab-'+t).style.display=t===name?'block':'none'});document.querySelectorAll('.tab').forEach(function(b){b.classList.toggle('active',b.dataset.tab===name)})}\n" +
+    "function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/\"/g,'&quot;')}\n" +
+    "async function loadMenu(){var r=await fetch(API+'/api/menu');var list=await r.json();var tb=document.getElementById('menuBody');tb.innerHTML=list.map(function(f){return '<tr><td><b>'+esc(f.name)+'</b></td><td class=\"price\">'+fmt(f.price)+'</td><td><span class=\"badge\">'+esc(f.category||'')+'</span></td><td><button class=\"btn-outline\" onclick=\'editFood('+JSON.stringify(f)+')\'>\u0648\u06cc\u0631\u0627\u06cc\u0634</button> <button class=\"btn-danger\" onclick=\"delFood(\\''+f.id+'\\')\">\u062d\u0630\u0641</button></td></tr>'}).join('')||'<tr><td colspan=\"4\">\u0645\u0646\u0648 \u062e\u0627\u0644\u06cc \u0627\u0633\u062a</td></tr>'}\n" +
+    "function clearFoodForm(){foodId.value='';foodName.value='';foodPrice.value='';foodCat.value='\u0639\u0645\u0648\u0645\u06cc';foodDesc.value=''}\n" +
+    "function editFood(f){foodId.value=f.id;foodName.value=f.name;foodPrice.value=f.price;foodCat.value=f.category||'\u0639\u0645\u0648\u0645\u06cc';foodDesc.value=f.description||''}\n" +
+    "async function saveFood(){var id=foodId.value;var body={name:foodName.value.trim(),price:Number(foodPrice.value)||0,category:foodCat.value.trim()||'\u0639\u0645\u0648\u0645\u06cc',description:foodDesc.value.trim(),isAvailable:true};if(!body.name)return flash('\u0646\u0627\u0645 \u0644\u0627\u0632\u0645 \u0627\u0633\u062a',false);var r=await fetch(API+(id?'/api/menu/'+id:'/api/menu'),{method:id?'PUT':'POST',headers:headers(true),body:JSON.stringify(body)});if(!r.ok)return flash('\u062e\u0637\u0627',false);flash('\u0630\u062e\u06cc\u0631\u0647 \u0634\u062f',true);clearFoodForm();loadMenu()}\n" +
+    "async function delFood(id){if(!confirm('\u062d\u0630\u0641\u061f'))return;await fetch(API+'/api/menu/'+id,{method:'DELETE',headers:headers()});flash('\u062d\u0630\u0641 \u0634\u062f',true);loadMenu()}\n" +
+    "async function loadOrders(){var r=await fetch(API+'/api/orders');var list=await r.json();document.getElementById('ordersList').innerHTML=list.map(function(o){return '<div style=\"border:1px solid #e0e0e0;border-radius:12px;padding:12px;margin-bottom:10px\"><b>'+esc(o.customerName)+'</b> \u2014 <span class=\"badge\">'+(statusFa[o.status]||o.status)+'</span><br/><small>\u062b\u0628\u062a: '+fmtTime(o.createdAt)+(o.deliveredAt?' | \u062a\u062d\u0648\u06cc\u0644: '+fmtTime(o.deliveredAt):'')+'</small><br/>'+(o.items||[]).map(function(i){return esc(i.foodName)+' \u00d7'+i.quantity}).join('\u060c ')+'<br/><span class=\"price\">'+fmt(o.totalAmount)+' \u062a\u0648\u0645\u0627\u0646</span><div class=\"row\" style=\"margin-top:8px\"><button class=\"btn-outline\" onclick=\"setStatus(\\''+o.id+'\\',\\'preparing\\')\">\u0622\u0645\u0627\u062f\u0647\u200c\u0633\u0627\u0632\u06cc</button><button class=\"btn-outline\" onclick=\"setStatus(\\''+o.id+'\\',\\'shipped\\')\">\u0627\u0631\u0633\u0627\u0644</button><button class=\"btn\" onclick=\"setStatus(\\''+o.id+'\\',\\'delivered\\')\">\u062a\u062d\u0648\u06cc\u0644</button></div></div>'}).join('')||'<p>\u0633\u0641\u0627\u0631\u0634\u06cc \u0646\u06cc\u0633\u062a</p>'}\n" +
+    "async function setStatus(id,status){await fetch(API+'/api/orders/'+id+'/status',{method:'PATCH',headers:headers(true),body:JSON.stringify({status:status,byKitchen:true})});flash('\u0648\u0636\u0639\u06cc\u062a \u0628\u0647\u200c\u0631\u0648\u0632 \u0634\u062f',true);loadOrders()}\n" +
+    "async function loadCustomers(){var r=await fetch(API+'/api/customers',{headers:headers()});if(!r.ok)return;var list=await r.json();document.getElementById('custList').innerHTML=list.map(function(c){return '<div style=\"border-bottom:1px solid #eee;padding:10px 0\"><b>'+esc(c.name)+'</b> \u2014 '+esc(c.phone)+' \u2014 \u06a9\u062f: <b>'+esc(c.subscriptionCode||'-')+'</b><br/><small>'+esc((c.address&&c.address.street)||'')+' '+esc((c.address&&c.address.city)||'')+'</small><br/>\u0628\u062f\u0647\u06cc: <span style=\"color:var(--err)\">'+fmt(c.debt)+'</span> | \u0627\u0639\u062a\u0628\u0627\u0631: <span style=\"color:var(--ok)\">'+fmt(c.credit)+'</span></div>'}).join('')||'<p>\u0645\u0634\u062a\u0631\u06cc \u0646\u06cc\u0633\u062a</p>'}\n" +
+    "async function addCustomer(){var body={name:cName.value.trim(),phone:cPhone.value.trim(),subscriptionCode:cCode.value.trim()||null,address:{street:cStreet.value.trim(),city:cCity.value.trim(),postalCode:'',notes:''}};if(!body.name||!body.phone)return flash('\u0646\u0627\u0645 \u0648 \u062a\u0644\u0641\u0646 \u0644\u0627\u0632\u0645 \u0627\u0633\u062a',false);var r=await fetch(API+'/api/customers',{method:'POST',headers:headers(true),body:JSON.stringify(body)});if(!r.ok)return flash('\u062e\u0637\u0627',false);flash('\u0645\u0634\u062a\u0631\u06cc \u0627\u0636\u0627\u0641\u0647 \u0634\u062f',true);cName.value=cPhone.value=cCode.value=cStreet.value=cCity.value='';loadCustomers()}\n" +
+    "</scr"+"ipt></body></html>";
 }
