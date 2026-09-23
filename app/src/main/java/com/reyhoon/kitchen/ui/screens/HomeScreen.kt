@@ -9,18 +9,26 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.reyhoon.kitchen.data.ApiClient
+import com.reyhoon.kitchen.data.ApiConfig
 import com.reyhoon.kitchen.data.AppRepository
+import com.reyhoon.kitchen.data.Order
+import com.reyhoon.kitchen.data.OrderStatus
 import com.reyhoon.kitchen.ui.components.ReyhoonLogo
 import com.reyhoon.kitchen.ui.theme.GreenMid
 import com.reyhoon.kitchen.ui.theme.GreenPale
 import com.reyhoon.kitchen.ui.theme.OrangeSecondary
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -31,6 +39,25 @@ fun HomeScreen(
     modifier: Modifier = Modifier
 ) {
     val customer by AppRepository.currentCustomer
+    var orders by remember { mutableStateOf<List<Order>>(emptyList()) }
+    val scope = rememberCoroutineScope()
+
+    LaunchedEffect(customer?.id) {
+        val id = customer?.id ?: return@LaunchedEffect
+        while (true) {
+            if (ApiConfig.isConfigured) {
+                orders = ApiClient.fetchOrders(id)
+            } else {
+                orders = AppRepository.orders.filter { it.customerId == id }
+            }
+            delay(8_000)
+        }
+    }
+
+    fun formatTs(ts: Long?): String {
+        if (ts == null || ts <= 0) return "—"
+        return SimpleDateFormat("HH:mm", Locale("fa")).format(Date(ts))
+    }
 
     Scaffold(
         topBar = {
@@ -57,10 +84,7 @@ fun HomeScreen(
         modifier = modifier
     ) { padding ->
         if (customer == null) {
-            Box(
-                modifier = Modifier.fillMaxSize().padding(padding),
-                contentAlignment = Alignment.Center
-            ) {
+            Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
                 Text("لطفاً دوباره وارد شوید")
             }
             return@Scaffold
@@ -84,46 +108,29 @@ fun HomeScreen(
                 shape = RoundedCornerShape(18.dp),
                 colors = CardDefaults.cardColors(containerColor = GreenMid.copy(alpha = 0.12f))
             ) {
-                Row(
-                    modifier = Modifier.padding(20.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
+                Row(modifier = Modifier.padding(20.dp), verticalAlignment = Alignment.CenterVertically) {
                     ReyhoonLogo(size = 56.dp)
                     Spacer(modifier = Modifier.width(14.dp))
                     Column {
-                        Text(
-                            text = "مشتری: ${customer!!.name}",
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Text(
-                            text = "کد اشتراک: ${customer!!.subscriptionCode ?: "—"}",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
-                        )
+                        Text("مشتری: ${customer!!.name}", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                        Text("کد: ${customer!!.subscriptionCode ?: "—"}", style = MaterialTheme.typography.bodyMedium)
                     }
                 }
             }
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Card(
                     modifier = Modifier.weight(1f),
                     shape = RoundedCornerShape(14.dp),
                     colors = CardDefaults.cardColors(
                         containerColor = if (customer!!.debt > 0)
-                            MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.45f)
-                        else GreenPale
+                            MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.45f) else GreenPale
                     )
                 ) {
                     Column(modifier = Modifier.padding(14.dp)) {
-                        Text("بدهی", style = MaterialTheme.typography.labelMedium)
+                        Text("بدهی")
                         Text(
-                            if (customer!!.debt > 0)
-                                "${AppRepository.formatPrice(customer!!.debt)} ت"
-                            else "۰",
+                            if (customer!!.debt > 0) "${AppRepository.formatPrice(customer!!.debt)} ت" else "۰",
                             fontWeight = FontWeight.Bold,
                             color = if (customer!!.debt > 0) MaterialTheme.colorScheme.error else GreenMid
                         )
@@ -135,36 +142,22 @@ fun HomeScreen(
                     colors = CardDefaults.cardColors(containerColor = GreenPale)
                 ) {
                     Column(modifier = Modifier.padding(14.dp)) {
-                        Text("اعتبار", style = MaterialTheme.typography.labelMedium)
+                        Text("اعتبار")
                         Text(
-                            if (customer!!.credit > 0)
-                                "${AppRepository.formatPrice(customer!!.credit)} ت"
-                            else "۰",
-                            fontWeight = FontWeight.Bold,
-                            color = GreenMid
+                            if (customer!!.credit > 0) "${AppRepository.formatPrice(customer!!.credit)} ت" else "۰",
+                            fontWeight = FontWeight.Bold, color = GreenMid
                         )
                     }
                 }
             }
 
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
-                onClick = onNavigateToAddress
-            ) {
-                Row(
-                    modifier = Modifier.padding(18.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
+            Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp), onClick = onNavigateToAddress) {
+                Row(modifier = Modifier.padding(18.dp), verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.LocationOn, null, tint = OrangeSecondary, modifier = Modifier.size(28.dp))
                     Spacer(modifier = Modifier.width(12.dp))
                     Column(modifier = Modifier.weight(1f)) {
                         Text("آدرس تحویل", fontWeight = FontWeight.SemiBold)
-                        Text(
-                            customer!!.address.fullAddress(),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f)
-                        )
+                        Text(customer!!.address.fullAddress(), style = MaterialTheme.typography.bodyMedium)
                     }
                     Icon(Icons.Default.ChevronLeft, null)
                 }
@@ -180,14 +173,63 @@ fun HomeScreen(
                 Text("ثبت سفارش جدید برای این مشتری", fontWeight = FontWeight.Bold)
             }
 
-            OutlinedButton(
-                onClick = onNavigateToAddress,
-                modifier = Modifier.fillMaxWidth().height(50.dp),
-                shape = RoundedCornerShape(14.dp)
-            ) {
-                Icon(Icons.Default.EditLocation, null)
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("ویرایش آدرس")
+            Text("سفارش‌های این مشتری", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+            Text("وضعیت با اپ مشتری همگام است", style = MaterialTheme.typography.bodySmall)
+
+            if (orders.isEmpty()) {
+                Text("هنوز سفارشی ثبت نشده", color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+            } else {
+                orders.take(15).forEach { o ->
+                    Card(shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(o.statusEnum.labelFa, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                                Text(formatTs(o.createdAt), style = MaterialTheme.typography.bodySmall)
+                            }
+                            o.items.forEach { Text("• ${it.foodName} × ${it.quantity}") }
+                            Text(
+                                "${AppRepository.formatPrice(o.totalAmount)} ت | دریافتی ${AppRepository.formatPrice(o.paidAmount)}",
+                                color = OrangeSecondary, fontWeight = FontWeight.SemiBold
+                            )
+                            if (o.status != OrderStatus.DELIVERED.key) {
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    if (o.status == OrderStatus.REGISTERED.key) {
+                                        FilledTonalButton(onClick = {
+                                            scope.launch {
+                                                if (ApiConfig.isConfigured)
+                                                    ApiClient.updateOrderStatus(o.id, OrderStatus.PREPARING.key, byKitchen = true)
+                                                orders = if (ApiConfig.isConfigured)
+                                                    ApiClient.fetchOrders(customer!!.id)
+                                                else orders
+                                            }
+                                        }) { Text("آماده‌سازی") }
+                                    }
+                                    if (o.status != OrderStatus.SHIPPED.key && o.status != OrderStatus.DELIVERED.key) {
+                                        FilledTonalButton(onClick = {
+                                            scope.launch {
+                                                if (ApiConfig.isConfigured)
+                                                    ApiClient.updateOrderStatus(o.id, OrderStatus.SHIPPED.key, byKitchen = true)
+                                                orders = if (ApiConfig.isConfigured)
+                                                    ApiClient.fetchOrders(customer!!.id)
+                                                else orders
+                                            }
+                                        }) { Text("ارسال") }
+                                    }
+                                    Button(onClick = {
+                                        scope.launch {
+                                            if (ApiConfig.isConfigured)
+                                                ApiClient.updateOrderStatus(o.id, OrderStatus.DELIVERED.key, byKitchen = true)
+                                            orders = if (ApiConfig.isConfigured)
+                                                ApiClient.fetchOrders(customer!!.id)
+                                            else orders
+                                        }
+                                    }) { Text("تحویل") }
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
     }

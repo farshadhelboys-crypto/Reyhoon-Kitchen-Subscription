@@ -20,16 +20,14 @@ import com.reyhoon.kitchen.data.ApiClient
 import com.reyhoon.kitchen.data.ApiConfig
 import com.reyhoon.kitchen.data.AppRepository
 import com.reyhoon.kitchen.data.FoodItem
+import com.reyhoon.kitchen.data.MenuCategories
 import com.reyhoon.kitchen.ui.theme.GreenPrimary
 import com.reyhoon.kitchen.ui.theme.OrangeSecondary
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AdminMenuScreen(
-    onBack: () -> Unit,
-    modifier: Modifier = Modifier
-) {
+fun AdminMenuScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
     var items by remember { mutableStateOf<List<FoodItem>>(emptyList()) }
     var loading by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
@@ -47,7 +45,7 @@ fun AdminMenuScreen(
             message = "همگام با سرور — ${remote.size} غذا"
         } else {
             items = AppRepository.menuItems.toList()
-            message = "آفلاین — فقط محلی"
+            message = "آفلاین"
         }
         loading = false
     }
@@ -60,11 +58,7 @@ fun AdminMenuScreen(
                 title = {
                     Column {
                         Text("مدیریت منو", fontWeight = FontWeight.Bold)
-                        Text(
-                            if (ApiConfig.isConfigured) "ذخیره روی سرور → اپ مشتری"
-                            else "حالت محلی",
-                            style = MaterialTheme.typography.bodySmall
-                        )
+                        Text("دسته‌ها: چلو، خورشت، نوشیدنی، مخلفات...", style = MaterialTheme.typography.bodySmall)
                     }
                 },
                 navigationIcon = {
@@ -86,10 +80,7 @@ fun AdminMenuScreen(
             )
         },
         floatingActionButton = {
-            FloatingActionButton(
-                onClick = { editing = null; showDialog = true },
-                containerColor = GreenPrimary
-            ) {
+            FloatingActionButton(onClick = { editing = null; showDialog = true }, containerColor = GreenPrimary) {
                 Icon(Icons.Default.Add, "افزودن", tint = MaterialTheme.colorScheme.onPrimary)
             }
         },
@@ -97,62 +88,50 @@ fun AdminMenuScreen(
     ) { padding ->
         Column(modifier = Modifier.fillMaxSize().padding(padding)) {
             message?.let {
-                Text(
-                    it,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                    fontWeight = FontWeight.SemiBold,
-                    color = GreenPrimary
-                )
+                Text(it, modifier = Modifier.padding(16.dp), fontWeight = FontWeight.SemiBold, color = GreenPrimary)
             }
             if (loading && items.isEmpty()) {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator()
-                }
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
             } else if (items.isEmpty()) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Text("هنوز غذایی نیست. با + اضافه کنید.")
                 }
             } else {
+                val grouped = items.groupBy { it.category.ifBlank { "عمومی" } }
                 LazyColumn(
                     contentPadding = PaddingValues(16.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    items(items, key = { it.id }) { item ->
-                        Card(shape = RoundedCornerShape(12.dp)) {
-                            Row(
-                                modifier = Modifier.padding(14.dp).fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(item.name, fontWeight = FontWeight.SemiBold)
-                                    Text(item.category, style = MaterialTheme.typography.bodySmall)
-                                    Text(
-                                        "${AppRepository.formatPrice(item.price)} تومان",
-                                        color = OrangeSecondary,
-                                        fontWeight = FontWeight.Medium
-                                    )
-                                }
-                                IconButton(onClick = {
-                                    editing = item
-                                    showDialog = true
-                                }) {
-                                    Icon(Icons.Default.Edit, "ویرایش")
-                                }
-                                IconButton(onClick = {
-                                    scope.launch {
-                                        loading = true
-                                        val ok = if (ApiConfig.isConfigured) {
-                                            ApiClient.deleteMenuItem(item.id)
-                                        } else {
-                                            AppRepository.deleteFood(item.id)
-                                            true
-                                        }
-                                        if (ok) refresh()
-                                        else message = "حذف ناموفق"
-                                        loading = false
+                    grouped.forEach { (cat, list) ->
+                        item {
+                            Text(cat, fontWeight = FontWeight.Bold, color = GreenPrimary,
+                                modifier = Modifier.padding(vertical = 4.dp))
+                        }
+                        items(list, key = { it.id }) { item ->
+                            Card(shape = RoundedCornerShape(12.dp)) {
+                                Row(
+                                    modifier = Modifier.padding(14.dp).fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(item.name, fontWeight = FontWeight.SemiBold)
+                                        Text(
+                                            "${AppRepository.formatPrice(item.price)} تومان",
+                                            color = OrangeSecondary, fontWeight = FontWeight.Medium
+                                        )
                                     }
-                                }) {
-                                    Icon(Icons.Default.Delete, "حذف", tint = MaterialTheme.colorScheme.error)
+                                    IconButton(onClick = { editing = item; showDialog = true }) {
+                                        Icon(Icons.Default.Edit, "ویرایش")
+                                    }
+                                    IconButton(onClick = {
+                                        scope.launch {
+                                            if (ApiConfig.isConfigured) ApiClient.deleteMenuItem(item.id)
+                                            else AppRepository.deleteFood(item.id)
+                                            refresh()
+                                        }
+                                    }) {
+                                        Icon(Icons.Default.Delete, "حذف", tint = MaterialTheme.colorScheme.error)
+                                    }
                                 }
                             }
                         }
@@ -168,34 +147,24 @@ fun AdminMenuScreen(
             onDismiss = { showDialog = false },
             onSave = { food ->
                 scope.launch {
-                    loading = true
                     val result = if (ApiConfig.isConfigured) {
-                        if (editing != null) ApiClient.updateMenuItem(food)
-                        else ApiClient.createMenuItem(food)
+                        if (editing != null) ApiClient.updateMenuItem(food) else ApiClient.createMenuItem(food)
                     } else {
-                        if (editing != null) {
-                            AppRepository.updateFood(food)
-                            food
-                        } else {
-                            AppRepository.addFood(food)
-                            food
-                        }
+                        if (editing != null) AppRepository.updateFood(food) else AppRepository.addFood(food)
+                        food
                     }
                     if (result != null) {
-                        message = if (editing != null) "ویرایش شد و در اپ مشتری اعمال می‌شود"
-                        else "ذخیره شد — مشتری منو را می‌بیند"
+                        message = "ذخیره شد — مشتری دسته‌بندی را می‌بیند"
                         showDialog = false
                         refresh()
-                    } else {
-                        message = "خطا در ذخیره روی سرور"
-                    }
-                    loading = false
+                    } else message = "خطا در ذخیره"
                 }
             }
         )
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun FoodEditDialog(
     initial: FoodItem?,
@@ -204,8 +173,9 @@ private fun FoodEditDialog(
 ) {
     var name by remember { mutableStateOf(initial?.name ?: "") }
     var price by remember { mutableStateOf(initial?.price?.toString() ?: "") }
-    var category by remember { mutableStateOf(initial?.category ?: "عمومی") }
+    var category by remember { mutableStateOf(initial?.category ?: MenuCategories.ALL.first()) }
     var desc by remember { mutableStateOf(initial?.description ?: "") }
+    var catExpanded by remember { mutableStateOf(false) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -219,7 +189,24 @@ private fun FoodEditDialog(
                     label = { Text("قیمت (تومان)") },
                     singleLine = true
                 )
-                OutlinedTextField(value = category, onValueChange = { category = it }, label = { Text("دسته") }, singleLine = true)
+                ExposedDropdownMenuBox(expanded = catExpanded, onExpandedChange = { catExpanded = it }) {
+                    OutlinedTextField(
+                        value = category,
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("دسته") },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(catExpanded) },
+                        modifier = Modifier.menuAnchor().fillMaxWidth()
+                    )
+                    ExposedDropdownMenu(expanded = catExpanded, onDismissRequest = { catExpanded = false }) {
+                        MenuCategories.ALL.forEach { cat ->
+                            DropdownMenuItem(
+                                text = { Text(cat) },
+                                onClick = { category = cat; catExpanded = false }
+                            )
+                        }
+                    }
+                }
                 OutlinedTextField(value = desc, onValueChange = { desc = it }, label = { Text("توضیحات") }, maxLines = 2)
             }
         },
@@ -234,7 +221,7 @@ private fun FoodEditDialog(
                                 name = name.trim(),
                                 description = desc.trim(),
                                 price = p,
-                                category = category.trim().ifBlank { "عمومی" }
+                                category = category
                             )
                         )
                     }
@@ -242,8 +229,6 @@ private fun FoodEditDialog(
                 enabled = name.isNotBlank() && (price.toLongOrNull() ?: 0) > 0
             ) { Text("ذخیره") }
         },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("انصراف") }
-        }
+        dismissButton = { TextButton(onClick = onDismiss) { Text("انصراف") } }
     )
 }
