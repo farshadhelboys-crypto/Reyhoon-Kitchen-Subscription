@@ -8,9 +8,7 @@ data class Customer(
     val phone: String,
     val address: Address,
     val subscriptionCode: String? = null,
-    /** مبلغی که مشتری به آشپزخانه بدهکار است */
     val debt: Long = 0L,
-    /** اعتبار مشتری: پولی که بیشتر پرداخت کرده و در سفارش بعدی کسر می‌شود */
     val credit: Long = 0L,
     val notes: String = "",
     val createdAt: Long = System.currentTimeMillis()
@@ -47,21 +45,40 @@ data class OrderItem(
     val total: Long get() = unitPrice * quantity
 }
 
+/** وضعیت سفارش در کل سیستم */
+enum class OrderStatus(val key: String, val labelFa: String) {
+    REGISTERED("registered", "سفارش ثبت شد"),
+    PREPARING("preparing", "در حال آماده‌سازی"),
+    SHIPPED("shipped", "ارسال شده"),
+    DELIVERED("delivered", "تحویل داده شد");
+
+    companion object {
+        fun fromKey(key: String): OrderStatus =
+            entries.find { it.key == key } ?: REGISTERED
+    }
+}
+
 data class Order(
     val id: String = UUID.randomUUID().toString(),
     val customerId: String,
     val customerName: String,
+    val customerPhone: String = "",
     val items: List<OrderItem>,
     val totalAmount: Long,
     val paidAmount: Long = 0L,
-    /** مبلغ کسر شده از اعتبار قبلی مشتری */
     val creditApplied: Long = 0L,
+    val status: String = OrderStatus.REGISTERED.key,
     val createdAt: Long = System.currentTimeMillis(),
+    val preparingAt: Long? = null,
+    val shippedAt: Long? = null,
+    val deliveredAt: Long? = null,
+    val deliveredByCustomer: Boolean = false,
+    val deliveredByKitchen: Boolean = false,
     val note: String = ""
 ) {
     val remaining: Long get() = (totalAmount - paidAmount).coerceAtLeast(0)
     val isFullyPaid: Boolean get() = remaining == 0L
-    val isPartial: Boolean get() = paidAmount > 0 && remaining > 0
+    val statusEnum: OrderStatus get() = OrderStatus.fromKey(status)
 }
 
 data class Payment(
@@ -81,7 +98,6 @@ data class SalesSummary(
     val orderCount: Int
 )
 
-/** نتیجه ثبت سفارش برای نمایش پیام به ادمین */
 data class OrderResult(
     val order: Order,
     val creditApplied: Long,
