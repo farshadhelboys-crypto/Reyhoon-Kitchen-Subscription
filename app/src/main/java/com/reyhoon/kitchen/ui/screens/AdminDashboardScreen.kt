@@ -53,16 +53,20 @@ fun AdminDashboardScreen(
     var lastSeenAt by remember { mutableStateOf(System.currentTimeMillis() - 30_000) }
     var liveAlert by remember { mutableStateOf<String?>(null) }
 
-    // حتی وقتی داخل داشبورد هستید سفارش جدید آلارم می‌دهد
     LaunchedEffect(Unit) {
         NotificationHelper.ensureChannels(context)
         while (true) {
             if (ApiConfig.isConfigured) {
                 val fresh = ApiClient.fetchNewOrders(lastSeenAt)
                 if (fresh.isNotEmpty()) {
-                    val name = fresh.first().customerName
-                    liveAlert = "سفارش جدید دارید! ${fresh.size} — $name"
-                    NotificationHelper.notifyNewOrder(context, fresh.size, name)
+                    val n = NotificationHelper.notifyNewOrders(
+                        context,
+                        fresh.map { it.id },
+                        fresh.first().customerName
+                    )
+                    if (n > 0) {
+                        liveAlert = "سفارش جدید دارید! $n — ${fresh.first().customerName}"
+                    }
                     lastSeenAt = maxOf(lastSeenAt, fresh.maxOf { it.createdAt })
                 }
             }
@@ -105,13 +109,22 @@ fun AdminDashboardScreen(
             liveAlert?.let { msg ->
                 Card(
                     colors = CardDefaults.cardColors(containerColor = OrangeSecondary.copy(alpha = 0.2f)),
-                    onClick = onNavigateToOrders
+                    onClick = {
+                        NotificationHelper.stopAlarm(context)
+                        liveAlert = null
+                        onNavigateToOrders()
+                    }
                 ) {
-                    Text(
-                        msg,
+                    Row(
                         modifier = Modifier.padding(12.dp),
-                        fontWeight = FontWeight.Bold
-                    )
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(msg, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                        TextButton(onClick = {
+                            NotificationHelper.stopAlarm(context)
+                            liveAlert = null
+                        }) { Text("باشه") }
+                    }
                 }
             }
 
@@ -126,7 +139,7 @@ fun AdminDashboardScreen(
             ) {
                 Text(
                     text = if (ApiConfig.isConfigured)
-                        "آنلاین: ${ApiConfig.baseUrl}\nآلارم سفارش هر ۸ ثانیه فعال است"
+                        "آنلاین: ${ApiConfig.baseUrl}\nآلارم سفارش فعال (یک‌بار برای هر سفارش)"
                     else
                         "آدرس Worker تنظیم نشده",
                     modifier = Modifier.padding(12.dp),
@@ -165,10 +178,10 @@ fun AdminDashboardScreen(
             Spacer(modifier = Modifier.height(8.dp))
             Text("عملیات سریع", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
 
-            AdminActionButton(Icons.Filled.NotificationsActive, "سفارش‌های آنلاین + آلارم", "نوتیف و صدا هنگام سفارش جدید", onNavigateToOrders)
+            AdminActionButton(Icons.Filled.NotificationsActive, "سفارش‌های آنلاین + آلارم", "نوتیف یک‌باره — با باشه قطع می‌شود", onNavigateToOrders)
             AdminActionButton(Icons.Filled.RestaurantMenu, "مدیریت منو (همگام با سرور)", "افزودن/ویرایش/حذف — اپ مشتری به‌روز می‌شود", onNavigateToMenuManage)
             AdminActionButton(Icons.Filled.Star, "امتیازات پیک", "امتیازهایی که مشتری بعد از تحویل می‌دهد", onNavigateToRatings)
-            AdminActionButton(Icons.Filled.AddShoppingCart, "ثبت سفارش جدید", "سفارش تلفنی / حضوری", onNavigateToNewOrder)
+            AdminActionButton(Icons.Filled.AddShoppingCart, "ثبت سفارش جدید", "انتخاب مشتری از لیست", onNavigateToNewOrder)
             AdminActionButton(Icons.Filled.People, "مشتریان و بدهی", "افزودن مشتری و تسویه", onNavigateToCustomers)
         }
     }

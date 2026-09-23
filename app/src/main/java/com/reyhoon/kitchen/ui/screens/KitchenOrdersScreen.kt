@@ -45,15 +45,25 @@ fun KitchenOrdersScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
         return SimpleDateFormat("yyyy/MM/dd HH:mm", Locale("fa")).format(Date(ts))
     }
 
+    fun dismissAlert() {
+        alertText = null
+        NotificationHelper.stopAlarm(context)
+    }
+
     suspend fun refresh(fromPoll: Boolean = false) {
         if (!fromPoll) loading = true
         if (ApiConfig.isConfigured) {
             online = ApiClient.health()
             val fresh = ApiClient.fetchNewOrders(lastSeenAt)
             if (fresh.isNotEmpty()) {
-                val name = fresh.first().customerName
-                alertText = "سفارش جدید دارید! ${fresh.size} مورد — $name"
-                NotificationHelper.notifyNewOrder(context, fresh.size, name)
+                val n = NotificationHelper.notifyNewOrders(
+                    context,
+                    fresh.map { it.id },
+                    fresh.first().customerName
+                )
+                if (n > 0) {
+                    alertText = "سفارش جدید دارید! $n مورد — ${fresh.first().customerName}"
+                }
                 lastSeenAt = maxOf(lastSeenAt, fresh.maxOf { it.createdAt })
             }
             orders = ApiClient.fetchOrders()
@@ -88,7 +98,10 @@ fun KitchenOrdersScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                     }
                 },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
+                    IconButton(onClick = {
+                        NotificationHelper.stopAlarm(context)
+                        onBack()
+                    }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "بازگشت")
                     }
                 },
@@ -117,7 +130,7 @@ fun KitchenOrdersScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                         Icon(Icons.Filled.NotificationsActive, null, tint = OrangeSecondary)
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(msg, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-                        TextButton(onClick = { alertText = null }) { Text("باشه") }
+                        TextButton(onClick = { dismissAlert() }) { Text("باشه") }
                     }
                 }
             }
@@ -137,6 +150,7 @@ fun KitchenOrdersScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                     items(orders, key = { it.id }) { order ->
                         OrderCard(order, ::formatTs) { status ->
                             scope.launch {
+                                NotificationHelper.stopAlarm(context)
                                 if (ApiConfig.isConfigured) {
                                     ApiClient.updateOrderStatus(order.id, status, byKitchen = true)
                                     orders = ApiClient.fetchOrders()
