@@ -40,21 +40,34 @@ fun HomeScreen(
 ) {
     val customer by AppRepository.currentCustomer
     var orders by remember { mutableStateOf<List<Order>>(emptyList()) }
+    var payOrder by remember { mutableStateOf<Order?>(null) }
     val scope = rememberCoroutineScope()
+
+    suspend fun reloadOrders(id: String) {
+        val local = AppRepository.orders.filter { it.customerId == id }
+        if (ApiConfig.isConfigured) {
+            val remote = ApiClient.fetchOrders(id)
+            val byId = linkedMapOf<String, Order>()
+            local.forEach { byId[it.id] = it }
+            remote.forEach { byId[it.id] = it }
+            orders = byId.values.sortedByDescending { it.createdAt }
+            val code = customer?.subscriptionCode
+            if (!code.isNullOrBlank()) {
+                val refreshed = ApiClient.fetchCustomerByCode(code)
+                if (refreshed != null) {
+                    AppRepository.updateCustomer(refreshed)
+                    AppRepository.currentCustomer.value = refreshed
+                }
+            }
+        } else {
+            orders = local.sortedByDescending { it.createdAt }
+        }
+    }
 
     LaunchedEffect(customer?.id) {
         val id = customer?.id ?: return@LaunchedEffect
         while (true) {
-            val local = AppRepository.orders.filter { it.customerId == id }
-            if (ApiConfig.isConfigured) {
-                val remote = ApiClient.fetchOrders(id)
-                val byId = linkedMapOf<String, Order>()
-                local.forEach { byId[it.id] = it }
-                remote.forEach { byId[it.id] = it }
-                orders = byId.values.sortedByDescending { it.createdAt }
-            } else {
-                orders = local.sortedByDescending { it.createdAt }
-            }
+            reloadOrders(id)
             delay(8_000)
         }
     }
@@ -95,15 +108,13 @@ fun HomeScreen(
             return@Scaffold
         }
 
+        val displayDebt = AppRepository.recalculateDebt(customer!!.id).coerceAtLeast(customer!!.debt)
+
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .background(
-                    Brush.verticalGradient(
-                        listOf(GreenPale.copy(alpha = 0.5f), MaterialTheme.colorScheme.background)
-                    )
-                )
+                .background(Brush.verticalGradient(listOf(GreenPale.copy(alpha = 0.5f), MaterialTheme.colorScheme.background)))
                 .verticalScroll(rememberScrollState())
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)
@@ -131,16 +142,15 @@ fun HomeScreen(
                     modifier = Modifier.weight(1f),
                     shape = RoundedCornerShape(14.dp),
                     colors = CardDefaults.cardColors(
-                        containerColor = if (customer!!.debt > 0)
-                            MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.45f) else GreenPale
+                        containerColor = if (displayDebt > 0) MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.45f) else GreenPale
                     )
                 ) {
                     Column(modifier = Modifier.padding(14.dp)) {
                         Text("بدهی")
                         Text(
-                            if (customer!!.debt > 0) "${AppRepository.formatPrice(customer!!.debt)} ت" else "۰",
+                            if (displayDebt > 0) "${AppRepository.formatPrice(displayDebt)} ت" else "۰",
                             fontWeight = FontWeight.Bold,
-                            color = if (customer!!.debt > 0) MaterialTheme.colorScheme.error else GreenMid
+                            color = if (displayDebt > 0) MaterialTheme.colorScheme.error else GreenMid
                         )
                     }
                 }
@@ -181,8 +191,8 @@ fun HomeScreen(
                 Text("ثبت سفارش جدید برای این مشتری", fontWeight = FontWeight.Bold)
             }
 
-            Text("سفارش‌های این مشتری (محلی + آنلاین)", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
-            Text("وضعیت با اپ مشتری همگام است", style = MaterialTheme.typography.bodySmall)
+            Text("سفارش‌های این مشتری", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+            Text("می‌توانید مبلغ دریافتی ثبت کنید تا بدهی کم شود", style = MaterialTheme.typography.bodySmall)
 
             if (orders.isEmpty()) {
                 Text("هنوز سفارشی ثبت نشده", color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
@@ -199,9 +209,12 @@ fun HomeScreen(
                             }
                             o.items.forEach { Text("• ${it.foodName} × ${it.quantity}") }
                             Text(
-                                "${AppRepository.formatPrice(o.totalAmount)} ت | دریافتی ${AppRepository.formatPrice(o.paidAmount)}",
+                                "جمع: ${AppRepository.formatPrice(o.totalAmount)} | دریافتی: ${AppRepository.formatPrice(o.paidAmount)}",
                                 color = OrangeSecondary, fontWeight = FontWeight.SemiBold
                             )
+                            if (o.remaining > 0) {
+                                Text("باقیمانده: ${AppRepository.formatPrice(o.remaining)}", color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold)
+                            }
                             if (o.status != OrderStatus.DELIVERED.key) {
                                 Spacer(modifier = Modifier.height(6.dp))
                                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -238,10 +251,53 @@ fun HomeScreen(
                                     }) { Text("تحویل") }
                                 }
                             }
+                            if (o.remaining > 0) {
+                                Spacer(modifier = Modifier.height(6.dp))
+                                OutlinedButton(onClick = { payOrder = o }, modifier = Modifier.fillMaxWidth()) {
+                                    Icon(Icons.Default.Payments, null, modifier = Modifier.size(18.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("ثبت مبلغ دریافتی")
+                                }
+                            }
                         }
                     }
                 }
             }
         }
+    }
+
+    payOrder?.let { o ->
+        var amount by remember { mutableStateOf("") }
+        AlertDialog(
+            onDismissRequest = { payOrder = null },
+            title = { Text("ثبت دریافت — ${o.customerName}") },
+            text = {
+                Column {
+                    Text("جمع: ${AppRepository.formatPrice(o.totalAmount)}")
+                    Text("دریافتی قبلی: ${AppRepository.formatPrice(o.paidAmount)}")
+                    Text("باقیمانده: ${AppRepository.formatPrice(o.remaining)}", fontWeight = FontWeight.Bold, color = OrangeSecondary)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = amount,
+                        onValueChange = { amount = it.filter { ch -> ch.isDigit() } },
+                        label = { Text("مبلغ دریافتی (تومان)") },
+                        singleLine = true
+                    )
+                }
+            },
+            confirmButton = {
+                Button(onClick = {
+                    val pay = amount.toLongOrNull() ?: 0L
+                    if (pay <= 0) return@Button
+                    scope.launch {
+                        if (ApiConfig.isConfigured) ApiClient.recordPayment(o.customerId, pay, "دریافت سفارش حضوری")
+                        AppRepository.recordPayment(o.customerId, pay, o.id, "دریافت سفارش حضوری")
+                        payOrder = null
+                        customer?.id?.let { reloadOrders(it) }
+                    }
+                }) { Text("ثبت") }
+            },
+            dismissButton = { TextButton(onClick = { payOrder = null }) { Text("انصراف") } }
+        )
     }
 }
