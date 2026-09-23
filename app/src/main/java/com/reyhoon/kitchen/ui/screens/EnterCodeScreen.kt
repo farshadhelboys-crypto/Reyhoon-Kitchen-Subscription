@@ -7,25 +7,27 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Kitchen
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.platform.LocalFocusManager
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.reyhoon.kitchen.R
-import com.reyhoon.kitchen.data.MockData
-import com.reyhoon.kitchen.data.Subscription
+import com.reyhoon.kitchen.data.AppRepository
 import com.reyhoon.kitchen.ui.theme.GreenPrimary
+import com.reyhoon.kitchen.ui.theme.OrangeSecondary
 
 @Composable
 fun EnterCodeScreen(
-    onCodeVerified: (Subscription) -> Unit,
+    onCustomerEntered: () -> Unit,
+    onAdminEntered: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     var code by remember { mutableStateOf("") }
@@ -33,141 +35,163 @@ fun EnterCodeScreen(
     var isLoading by remember { mutableStateOf(false) }
     val focusManager = LocalFocusManager.current
 
-    BoxWithConstraints(
+    Box(
         modifier = modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
+            .background(
+                Brush.verticalGradient(
+                    listOf(
+                        GreenPrimary.copy(alpha = 0.12f),
+                        MaterialTheme.colorScheme.background
+                    )
+                )
+            )
     ) {
-        val isCompact = maxWidth < 600.dp
-        val horizontalPadding = if (isCompact) 24.dp else 48.dp
-        val cardMaxWidth = if (isCompact) maxWidth else 480.dp
-
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = horizontalPadding)
-                .padding(vertical = 32.dp),
+                .padding(horizontal = 28.dp)
+                .padding(vertical = 40.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            Icon(
-                imageVector = Icons.Default.Kitchen,
-                contentDescription = null,
-                modifier = Modifier.size(if (isCompact) 72.dp else 96.dp),
-                tint = GreenPrimary
-            )
-            Spacer(modifier = Modifier.height(16.dp))
-            Text(
-                text = stringResource(R.string.welcome),
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Bold,
-                textAlign = TextAlign.Center,
-                color = MaterialTheme.colorScheme.onBackground
-            )
-            Spacer(modifier = Modifier.height(8.dp))
+            Box(
+                modifier = Modifier
+                    .size(96.dp)
+                    .clip(RoundedCornerShape(28.dp))
+                    .background(GreenPrimary),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Kitchen,
+                    contentDescription = null,
+                    modifier = Modifier.size(52.dp),
+                    tint = MaterialTheme.colorScheme.onPrimary
+                )
+            }
+
+            Spacer(modifier = Modifier.height(20.dp))
+
             Text(
                 text = "آشپزخانه ریحون",
-                style = MaterialTheme.typography.titleLarge,
-                color = GreenPrimary,
-                fontWeight = FontWeight.SemiBold
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.Bold,
+                color = GreenPrimary
             )
-            Spacer(modifier = Modifier.height(32.dp))
+            Text(
+                text = "سیستم اشتراک و حسابداری",
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
+                textAlign = TextAlign.Center
+            )
+
+            Spacer(modifier = Modifier.height(36.dp))
 
             Card(
-                modifier = Modifier
-                    .widthIn(max = cardMaxWidth)
-                    .fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
-                elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(20.dp),
+                elevation = CardDefaults.cardElevation(6.dp)
             ) {
                 Column(
-                    modifier = Modifier
-                        .padding(24.dp)
-                        .fillMaxWidth(),
+                    modifier = Modifier.padding(24.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Text(
-                        text = stringResource(R.string.enter_code_title),
+                        text = "ورود مشتری",
                         style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Medium
+                        fontWeight = FontWeight.SemiBold
                     )
-                    Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = "کد اشتراک خود را وارد کنید",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f)
+                    )
+
+                    Spacer(modifier = Modifier.height(20.dp))
+
                     OutlinedTextField(
                         value = code,
                         onValueChange = {
-                            code = it.uppercase()
+                            code = it.uppercase().trim()
                             errorMessage = null
                         },
-                        label = { Text(stringResource(R.string.enter_code_hint)) },
+                        label = { Text("کد اشتراک") },
                         singleLine = true,
                         isError = errorMessage != null,
                         supportingText = {
                             if (errorMessage != null) {
                                 Text(errorMessage!!, color = MaterialTheme.colorScheme.error)
-                            } else {
-                                Text(stringResource(R.string.code_example))
                             }
                         },
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                        keyboardActions = KeyboardActions(
-                            onDone = {
-                                focusManager.clearFocus()
-                                verifyCode(code, onCodeVerified) { errorMessage = it; isLoading = false }
-                            }
-                        ),
+                        keyboardActions = KeyboardActions(onDone = {
+                            focusManager.clearFocus()
+                            tryLogin(code, onCustomerEntered) { errorMessage = it }
+                        }),
                         modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp)
+                        shape = RoundedCornerShape(14.dp)
                     )
-                    Spacer(modifier = Modifier.height(24.dp))
+
+                    Spacer(modifier = Modifier.height(20.dp))
+
                     Button(
                         onClick = {
                             isLoading = true
                             focusManager.clearFocus()
-                            verifyCode(code, onCodeVerified) { errorMessage = it; isLoading = false }
+                            tryLogin(code, onCustomerEntered) {
+                                errorMessage = it
+                                isLoading = false
+                            }
+                            isLoading = false
                         },
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(52.dp),
                         enabled = code.isNotBlank() && !isLoading,
-                        shape = RoundedCornerShape(12.dp)
+                        shape = RoundedCornerShape(14.dp)
                     ) {
                         if (isLoading) {
                             CircularProgressIndicator(
-                                modifier = Modifier.size(24.dp),
-                                color = MaterialTheme.colorScheme.onPrimary,
-                                strokeWidth = 2.dp
+                                modifier = Modifier.size(22.dp),
+                                strokeWidth = 2.dp,
+                                color = MaterialTheme.colorScheme.onPrimary
                             )
                         } else {
-                            Text(
-                                text = stringResource(R.string.verify_code),
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.Medium
-                            )
+                            Text("ورود", fontSize = 16.sp, fontWeight = FontWeight.Medium)
                         }
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
-            Text(
-                text = "کدهای نمونه: REYHOON123  |  REYHOON456  |  TEST001",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
-                textAlign = TextAlign.Center
-            )
+            Spacer(modifier = Modifier.height(28.dp))
+
+            // Admin entry
+            OutlinedButton(
+                onClick = {
+                    AppRepository.isAdmin.value = true
+                    onAdminEntered()
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp),
+                shape = RoundedCornerShape(14.dp)
+            ) {
+                Icon(Icons.Default.Lock, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("ورود ادمین / حسابداری")
+            }
         }
     }
 }
 
-private fun verifyCode(
-    code: String,
-    onSuccess: (Subscription) -> Unit,
-    onError: (String) -> Unit
-) {
-    val sub = MockData.findSubscription(code)
-    if (sub != null && sub.isActive) {
-        onSuccess(sub)
+private fun tryLogin(code: String, onSuccess: () -> Unit, onError: (String) -> Unit) {
+    val customer = AppRepository.findByCode(code)
+    if (customer != null) {
+        AppRepository.currentCustomer.value = customer
+        AppRepository.isAdmin.value = false
+        onSuccess()
     } else {
-        onError("کد اشتراک نامعتبر یا منقضی شده است")
+        onError("کد اشتراک یافت نشد. با ادمین تماس بگیرید.")
     }
 }
