@@ -17,7 +17,7 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.modifier
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -94,7 +94,9 @@ fun KitchenOrdersScreen(
                     Column {
                         Text("سفارش‌های آنلاین", fontWeight = FontWeight.Bold)
                         Text(
-                            if (online) "متصل به سرور" else if (ApiConfig.isConfigured) "قطع ارتباط" else "حالت آفلاین — آدرس Worker را در ApiConfig بگذارید",
+                            if (online) "متصل به سرور"
+                            else if (ApiConfig.isConfigured) "قطع ارتباط"
+                            else "حالت آفلاین — آدرس Worker را در ApiConfig بگذارید",
                             style = MaterialTheme.typography.bodySmall
                         )
                     }
@@ -120,7 +122,7 @@ fun KitchenOrdersScreen(
         modifier = modifier
     ) { padding ->
         Column(
-            Modifier
+            modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
         ) {
@@ -132,11 +134,11 @@ fun KitchenOrdersScreen(
                         .padding(12.dp)
                 ) {
                     Row(
-                        Modifier.padding(12.dp),
+                        modifier = Modifier.padding(12.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(Icons.Default.NotificationsActive, null, tint = OrangeSecondary)
-                        Spacer(Modifier = Modifier.width(8.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
                         Text(msg, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
                         TextButton(onClick = { alertText = null }) { Text("باشه") }
                     }
@@ -144,11 +146,17 @@ fun KitchenOrdersScreen(
             }
 
             if (loading && orders.isEmpty()) {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
                     CircularProgressIndicator()
                 }
             } else if (orders.isEmpty()) {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
                     Text("سفارشی نیست", style = MaterialTheme.typography.titleMedium)
                 }
             } else {
@@ -183,7 +191,7 @@ private fun OrderCard(
     onStatus: (String) -> Unit
 ) {
     Card(shape = RoundedCornerShape(14.dp)) {
-        Column(Modifier.padding(14.dp)) {
+        Column(modifier = Modifier.padding(14.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(order.customerName, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
                 AssistChip(
@@ -196,9 +204,13 @@ private fun OrderCard(
             }
             Text("ساعت ثبت: ${formatTs(order.createdAt)}", style = MaterialTheme.typography.bodyMedium)
             if (order.deliveredAt != null) {
-                Text("ساعت تحویل: ${formatTs(order.deliveredAt)}", style = MaterialTheme.typography.bodyMedium, color = GreenMid)
+                Text(
+                    "ساعت تحویل: ${formatTs(order.deliveredAt)}",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = GreenMid
+                )
             }
-            Spacer(Modifier.height(6.dp))
+            Spacer(modifier = Modifier.height(6.dp))
             order.items.forEach { item ->
                 Text("• ${item.foodName} × ${item.quantity}")
             }
@@ -207,22 +219,28 @@ private fun OrderCard(
                 fontWeight = FontWeight.Bold,
                 color = OrangeSecondary
             )
-            Spacer(Modifier.height(8.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
+            Spacer(modifier = Modifier.height(8.dp))
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
                 if (order.status == OrderStatus.REGISTERED.key) {
-                    FilledTonalButton(onClick = { onStatus(OrderStatus.PREPARING.key) }, modifier = Modifier.weight(1f)) {
-                        Text("آماده‌سازی")
-                    }
+                    FilledTonalButton(
+                        onClick = { onStatus(OrderStatus.PREPARING.key) },
+                        modifier = Modifier.weight(1f)
+                    ) { Text("آماده‌سازی") }
                 }
                 if (order.status == OrderStatus.PREPARING.key || order.status == OrderStatus.REGISTERED.key) {
-                    FilledTonalButton(onClick = { onStatus(OrderStatus.SHIPPED.key) }, modifier = Modifier.weight(1f)) {
-                        Text("ارسال")
-                    }
+                    FilledTonalButton(
+                        onClick = { onStatus(OrderStatus.SHIPPED.key) },
+                        modifier = Modifier.weight(1f)
+                    ) { Text("ارسال") }
                 }
                 if (order.status != OrderStatus.DELIVERED.key) {
-                    Button(onClick = { onStatus(OrderStatus.DELIVERED.key) }, modifier = Modifier.weight(1f)) {
-                        Text("تحویل شد")
-                    }
+                    Button(
+                        onClick = { onStatus(OrderStatus.DELIVERED.key) },
+                        modifier = Modifier.weight(1f)
+                    ) { Text("تحویل شد") }
                 }
             }
         }
@@ -237,8 +255,7 @@ private fun playAlarm(context: Context) {
     } catch (_: Exception) { }
     try {
         val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            val vm = context.getSystemService(VibratorManager::class.java)
-            vm?.defaultVibrator
+            context.getSystemService(VibratorManager::class.java)?.defaultVibrator
         } else {
             context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
         }
