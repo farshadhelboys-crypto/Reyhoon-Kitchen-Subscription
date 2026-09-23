@@ -15,14 +15,18 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.reyhoon.kitchen.data.ApiClient
+import com.reyhoon.kitchen.data.ApiConfig
 import com.reyhoon.kitchen.data.AppRepository
 import com.reyhoon.kitchen.ui.components.ReyhoonLogo
 import com.reyhoon.kitchen.ui.theme.Cream
 import com.reyhoon.kitchen.ui.theme.GreenMid
 import com.reyhoon.kitchen.ui.theme.GreenPale
+import kotlinx.coroutines.launch
 
 @Composable
 fun EnterCodeScreen(
@@ -34,6 +38,40 @@ fun EnterCodeScreen(
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var isLoading by remember { mutableStateOf(false) }
     val focusManager = LocalFocusManager.current
+    val scope = rememberCoroutineScope()
+
+    fun doLogin() {
+        val trimmed = code.trim()
+        if (trimmed.isBlank()) return
+        scope.launch {
+            isLoading = true
+            errorMessage = null
+            focusManager.clearFocus()
+
+            // ۱) محلی
+            var customer = AppRepository.findByCode(trimmed)
+
+            // ۲) سرور
+            if (customer == null && ApiConfig.isConfigured) {
+                customer = ApiClient.fetchCustomerByCode(trimmed)
+                if (customer != null) {
+                    val idx = AppRepository.customers.indexOfFirst { it.id == customer.id }
+                    if (idx >= 0) AppRepository.customers[idx] = customer
+                    else AppRepository.customers.add(customer)
+                }
+            }
+
+            if (customer != null) {
+                AppRepository.currentCustomer.value = customer
+                AppRepository.isAdmin.value = false
+                isLoading = false
+                onCustomerEntered()
+            } else {
+                errorMessage = "کد اشتراک یافت نشد"
+                isLoading = false
+            }
+        }
+    }
 
     Box(
         modifier = modifier
@@ -44,7 +82,6 @@ fun EnterCodeScreen(
                 )
             )
     ) {
-        // Decorative soft circles
         Box(
             modifier = Modifier
                 .size(220.dp)
@@ -64,9 +101,7 @@ fun EnterCodeScreen(
             verticalArrangement = Arrangement.Center
         ) {
             ReyhoonLogo(size = 110.dp)
-
             Spacer(modifier = Modifier.height(16.dp))
-
             Text(
                 text = "آشپزخانه ریحون",
                 style = MaterialTheme.typography.headlineMedium,
@@ -74,7 +109,7 @@ fun EnterCodeScreen(
                 color = GreenMid
             )
             Text(
-                text = "طعم خانه، با حسابداری دقیق",
+                text = "ورود با کد اشتراک برای ثبت سفارش حضوری",
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
                 textAlign = TextAlign.Center
@@ -92,16 +127,13 @@ fun EnterCodeScreen(
                     modifier = Modifier.padding(24.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Text(
-                        text = "ورود مشتری",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold
-                    )
+                    Text("ورود مشتری حضوری", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                     Spacer(modifier = Modifier.height(6.dp))
                     Text(
-                        text = "کد اشتراک خود را وارد کنید",
+                        "کد اشتراک مشتری را بزنید و سفارش ثبت کنید",
                         style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f)
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
+                        textAlign = TextAlign.Center
                     )
 
                     Spacer(modifier = Modifier.height(20.dp))
@@ -109,10 +141,10 @@ fun EnterCodeScreen(
                     OutlinedTextField(
                         value = code,
                         onValueChange = {
-                            code = it.uppercase().trim()
+                            code = it.filter { ch -> ch.isDigit() }
                             errorMessage = null
                         },
-                        label = { Text("کد اشتراک") },
+                        label = { Text("کد اشتراک (عدد)") },
                         singleLine = true,
                         isError = errorMessage != null,
                         supportingText = {
@@ -120,11 +152,11 @@ fun EnterCodeScreen(
                                 Text(errorMessage!!, color = MaterialTheme.colorScheme.error)
                             }
                         },
-                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                        keyboardActions = KeyboardActions(onDone = {
-                            focusManager.clearFocus()
-                            tryLogin(code, onCustomerEntered) { errorMessage = it }
-                        }),
+                        keyboardOptions = KeyboardOptions(
+                            imeAction = ImeAction.Done,
+                            keyboardType = KeyboardType.Number
+                        ),
+                        keyboardActions = KeyboardActions(onDone = { doLogin() }),
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(14.dp)
                     )
@@ -132,18 +164,8 @@ fun EnterCodeScreen(
                     Spacer(modifier = Modifier.height(20.dp))
 
                     Button(
-                        onClick = {
-                            isLoading = true
-                            focusManager.clearFocus()
-                            tryLogin(code, onCustomerEntered) {
-                                errorMessage = it
-                                isLoading = false
-                            }
-                            isLoading = false
-                        },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(52.dp),
+                        onClick = { doLogin() },
+                        modifier = Modifier.fillMaxWidth().height(52.dp),
                         enabled = code.isNotBlank() && !isLoading,
                         shape = RoundedCornerShape(14.dp)
                     ) {
@@ -154,7 +176,7 @@ fun EnterCodeScreen(
                                 color = MaterialTheme.colorScheme.onPrimary
                             )
                         } else {
-                            Text("ورود", fontSize = 16.sp, fontWeight = FontWeight.Medium)
+                            Text("ورود و ثبت سفارش", fontSize = 16.sp, fontWeight = FontWeight.Medium)
                         }
                     }
                 }
@@ -167,9 +189,7 @@ fun EnterCodeScreen(
                     AppRepository.isAdmin.value = true
                     onAdminEntered()
                 },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(48.dp),
+                modifier = Modifier.fillMaxWidth().height(48.dp),
                 shape = RoundedCornerShape(14.dp)
             ) {
                 Icon(Icons.Default.Lock, contentDescription = null, modifier = Modifier.size(18.dp))
@@ -177,16 +197,5 @@ fun EnterCodeScreen(
                 Text("ورود ادمین / حسابداری")
             }
         }
-    }
-}
-
-private fun tryLogin(code: String, onSuccess: () -> Unit, onError: (String) -> Unit) {
-    val customer = AppRepository.findByCode(code)
-    if (customer != null) {
-        AppRepository.currentCustomer.value = customer
-        AppRepository.isAdmin.value = false
-        onSuccess()
-    } else {
-        onError("کد اشتراک یافت نشد. با ادمین تماس بگیرید.")
     }
 }
