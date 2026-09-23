@@ -1,22 +1,19 @@
 package com.reyhoon.customer
 
+import android.Manifest
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.content.Context
+import android.content.pm.PackageManager
+import android.media.RingtoneManager
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -28,40 +25,19 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Star
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.lightColorScheme
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.app.NotificationCompat
+import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.ContextCompat
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
@@ -69,8 +45,20 @@ import java.util.Date
 import java.util.Locale
 
 class MainActivity : ComponentActivity() {
+    private val notifPermission = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        ensureChannel(this)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
+                != PackageManager.PERMISSION_GRANTED
+            ) {
+                notifPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+            }
+        }
         enableEdgeToEdge()
         setContent {
             MaterialTheme(
@@ -87,6 +75,47 @@ class MainActivity : ComponentActivity() {
                 Surface(modifier = Modifier.fillMaxSize()) {
                     CustomerApp()
                 }
+            }
+        }
+    }
+
+    companion object {
+        const val CHANNEL = "reyhoon_customer_status"
+
+        fun ensureChannel(ctx: Context) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                val ch = NotificationChannel(
+                    CHANNEL,
+                    "وضعیت سفارش ریحون",
+                    NotificationManager.IMPORTANCE_HIGH
+                )
+                ctx.getSystemService(NotificationManager::class.java)?.createNotificationChannel(ch)
+            }
+        }
+
+        fun notifyStatus(ctx: Context, title: String, body: String) {
+            ensureChannel(ctx)
+            val n = NotificationCompat.Builder(ctx, CHANNEL)
+                .setSmallIcon(android.R.drawable.ic_dialog_info)
+                .setContentTitle(title)
+                .setContentText(body)
+                .setPriority(NotificationCompat.PRIORITY_HIGH)
+                .setAutoCancel(true)
+                .setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION))
+                .build()
+            try {
+                NotificationManagerCompat.from(ctx).notify(
+                    (System.currentTimeMillis() % Int.MAX_VALUE).toInt(),
+                    n
+                )
+            } catch (_: SecurityException) {
+            }
+            try {
+                RingtoneManager.getRingtone(
+                    ctx,
+                    RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+                )?.play()
+            } catch (_: Exception) {
             }
         }
     }
@@ -213,14 +242,8 @@ fun ExistingLogin(onLoggedIn: (Customer) -> Unit, onBack: () -> Unit) {
         enabled = code.isNotBlank() && !loading,
         modifier = Modifier.fillMaxWidth().height(50.dp)
     ) {
-        if (loading) {
-            CircularProgressIndicator(
-                modifier = Modifier.size(22.dp),
-                color = Color.White
-            )
-        } else {
-            Text("ورود", fontWeight = FontWeight.Bold)
-        }
+        if (loading) CircularProgressIndicator(modifier = Modifier.size(22.dp), color = Color.White)
+        else Text("ورود", fontWeight = FontWeight.Bold)
     }
     TextButton(onClick = onBack) { Text("بازگشت") }
 }
@@ -256,14 +279,8 @@ fun NewRegister(onRegistered: (Customer) -> Unit, onBack: () -> Unit) {
         enabled = name.isNotBlank() && phone.length >= 10 && !loading,
         modifier = Modifier.fillMaxWidth().height(50.dp)
     ) {
-        if (loading) {
-            CircularProgressIndicator(
-                modifier = Modifier.size(22.dp),
-                color = Color.White
-            )
-        } else {
-            Text("ثبت و ورود", fontWeight = FontWeight.Bold)
-        }
+        if (loading) CircularProgressIndicator(modifier = Modifier.size(22.dp), color = Color.White)
+        else Text("ثبت و ورود", fontWeight = FontWeight.Bold)
     }
     TextButton(onClick = onBack) { Text("بازگشت") }
 }
@@ -319,7 +336,12 @@ fun MenuOrderTab(customer: Customer) {
     var msg by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
 
-    LaunchedEffect(Unit) { menu = ApiClient.menu() }
+    LaunchedEffect(Unit) {
+        while (true) {
+            menu = ApiClient.menu()
+            delay(15_000)
+        }
+    }
 
     val cart = menu.mapNotNull { f ->
         val q = qty[f.id] ?: 0
@@ -382,13 +404,27 @@ fun MenuOrderTab(customer: Customer) {
 
 @Composable
 fun OrdersTab(customer: Customer) {
+    val context = LocalContext.current
     var orders by remember { mutableStateOf<List<Order>>(emptyList()) }
     var rateOrderId by remember { mutableStateOf<String?>(null) }
+    var statusBanner by remember { mutableStateOf<String?>(null) }
+    var knownStatus by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
     val scope = rememberCoroutineScope()
 
     LaunchedEffect(customer.id) {
         while (true) {
-            orders = ApiClient.orders(customer.id)
+            val list = ApiClient.orders(customer.id)
+            // تشخیص تغییر وضعیت
+            for (o in list) {
+                val prev = knownStatus[o.id]
+                if (prev != null && prev != o.status) {
+                    val msg = "وضعیت سفارش: ${o.statusFa}"
+                    statusBanner = msg
+                    MainActivity.notifyStatus(context, "ریحون — به‌روزرسانی سفارش", msg)
+                }
+            }
+            knownStatus = list.associate { it.id to it.status }
+            orders = list
             delay(8_000)
         }
     }
@@ -402,6 +438,15 @@ fun OrdersTab(customer: Customer) {
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         item {
+            statusBanner?.let {
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFFE8F5E9)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(it, modifier = Modifier.padding(12.dp), fontWeight = FontWeight.Bold, color = Color(0xFF2E7D32))
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+            }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("سفارش‌های من", fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
                 IconButton(onClick = { scope.launch { orders = ApiClient.orders(customer.id) } }) {
@@ -471,10 +516,7 @@ fun RateDialog(onDismiss: () -> Unit, onSubmit: (Int, String) -> Unit) {
         title = { Text("به پیک چه امتیازی می‌دهید؟", fontWeight = FontWeight.Bold) },
         text = {
             Column {
-                Row(
-                    horizontalArrangement = Arrangement.Center,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
+                Row(horizontalArrangement = Arrangement.Center, modifier = Modifier.fillMaxWidth()) {
                     (1..5).forEach { n ->
                         IconButton(onClick = { stars = n }) {
                             Icon(
