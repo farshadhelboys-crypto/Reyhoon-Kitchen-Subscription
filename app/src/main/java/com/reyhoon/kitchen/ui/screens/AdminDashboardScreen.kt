@@ -8,6 +8,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.AddShoppingCart
 import androidx.compose.material.icons.filled.ChevronLeft
+import androidx.compose.material.icons.filled.ListAlt
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.RestaurantMenu
@@ -43,36 +44,46 @@ fun AdminDashboardScreen(
 ) {
     val context = LocalContext.current
     var selectedPeriod by remember { mutableStateOf("روزانه") }
-    val orderCount = AppRepository.orders.size
-    val customerCount = AppRepository.customers.size
-    val summary = remember(selectedPeriod, orderCount) {
-        AppRepository.getSalesSummary(selectedPeriod)
-    }
-    val totalDebt = remember(orderCount, customerCount) { AppRepository.totalCustomerDebt() }
-    val totalCredit = remember(orderCount, customerCount) { AppRepository.totalCustomerCredit() }
     var lastSeenAt by remember { mutableStateOf(System.currentTimeMillis() - 30_000) }
-    var liveAlert by remember { mutableStateOf<String?>(null) }
+    var pendingCount by remember { mutableIntStateOf(0) }
+    var pendingName by remember { mutableStateOf("") }
+    var salesTick by remember { mutableIntStateOf(0) }
 
+    // همگام‌سازی سفارش‌های آنلاین برای گزارش مالی
     LaunchedEffect(Unit) {
         NotificationHelper.ensureChannels(context)
         while (true) {
             if (ApiConfig.isConfigured) {
+                val remote = ApiClient.fetchOrders()
+                remote.forEach { r ->
+                    val idx = AppRepository.orders.indexOfFirst { it.id == r.id }
+                    if (idx >= 0) AppRepository.orders[idx] = r
+                    else AppRepository.orders.add(0, r)
+                }
+                salesTick++
+
                 val fresh = ApiClient.fetchNewOrders(lastSeenAt)
                 if (fresh.isNotEmpty()) {
-                    val n = NotificationHelper.notifyNewOrders(
-                        context,
-                        fresh.map { it.id },
-                        fresh.first().customerName
+                    NotificationHelper.onNewOrdersDetected(
+                        context, fresh.map { it.id }, fresh.first().customerName
                     )
-                    if (n > 0) {
-                        liveAlert = "سفارش جدید دارید! $n — ${fresh.first().customerName}"
-                    }
+                    pendingCount = fresh.size
+                    pendingName = fresh.first().customerName
                     lastSeenAt = maxOf(lastSeenAt, fresh.maxOf { it.createdAt })
+                } else if (NotificationHelper.pendingAlarm) {
+                    // تکرار صدای آلارم تا باز کردن صفحه سفارش
+                    NotificationHelper.onNewOrdersDetected(context, emptyList(), pendingName)
                 }
             }
             delay(8_000)
         }
     }
+
+    val summary = remember(selectedPeriod, salesTick, AppRepository.orders.size) {
+        AppRepository.getSalesSummary(selectedPeriod)
+    }
+    val totalDebt = remember(salesTick, AppRepository.customers.size) { AppRepository.totalCustomerDebt() }
+    val totalCredit = remember(salesTick, AppRepository.customers.size) { AppRepository.totalCustomerCredit() }
 
     Scaffold(
         topBar = {
@@ -106,45 +117,46 @@ fun AdminDashboardScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            liveAlert?.let { msg ->
+            // بنر سفارش آنلاین — جایگزین لینک ورکر
+            if (NotificationHelper.pendingAlarm || pendingCount > 0) {
                 Card(
-                    colors = CardDefaults.cardColors(containerColor = OrangeSecondary.copy(alpha = 0.2f)),
-                    onClick = {
-                        NotificationHelper.stopAlarm(context)
-                        liveAlert = null
-                        onNavigateToOrders()
-                    }
+                    onClick = onNavigateToOrders,
+                    colors = CardDefaults.cardColors(containerColor = OrangeSecondary.copy(alpha = 0.25f)),
+                    shape = RoundedCornerShape(14.dp)
                 ) {
                     Row(
-                        modifier = Modifier.padding(12.dp),
+                        modifier = Modifier.padding(16.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(msg, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-                        TextButton(onClick = {
-                            NotificationHelper.stopAlarm(context)
-                            liveAlert = null
-                        }) { Text("باشه") }
+                        Icon(Icons.Filled.NotificationsActive, null, tint = OrangeSecondary)
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("سفارش آنلاین جدید", fontWeight = FontWeight.Bold)
+                            Text(
+                                if (pendingName.isNotBlank())
+                                    "$pendingName — برای قطع آلارم اینجا بزنید"
+                                else
+                                    "برای مشاهده و قطع آلارم ضربه بزنید"
+                            )
+                        }
+                        Text("مشاهده", fontWeight = FontWeight.Bold, color = OrangeSecondary)
                     }
                 }
-            }
-
-            Card(
-                colors = CardDefaults.cardColors(
-                    containerColor = if (ApiConfig.isConfigured)
-                        GreenMid.copy(alpha = 0.12f)
-                    else
-                        MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.35f)
-                ),
-                shape = RoundedCornerShape(12.dp)
-            ) {
-                Text(
-                    text = if (ApiConfig.isConfigured)
-                        "آنلاین: ${ApiConfig.baseUrl}\nآلارم سفارش فعال (یک‌بار برای هر سفارش)"
-                    else
-                        "آدرس Worker تنظیم نشده",
-                    modifier = Modifier.padding(12.dp),
-                    fontWeight = FontWeight.SemiBold
-                )
+            } else {
+                Card(
+                    onClick = onNavigateToOrders,
+                    colors = CardDefaults.cardColors(containerColor = GreenMid.copy(alpha = 0.12f)),
+                    shape = RoundedCornerShape(14.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(14.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Filled.ListAlt, null, tint = GreenMid)
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Text("مشاهده سفارش‌های آنلاین", fontWeight = FontWeight.SemiBold)
+                    }
+                }
             }
 
             Text("گزارش فروش", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
@@ -159,17 +171,11 @@ fun AdminDashboardScreen(
                 }
             }
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 StatCard("فروش کل", AppRepository.formatPrice(summary.totalSales), "${summary.orderCount} سفارش", Modifier.weight(1f), GreenMid)
                 StatCard("دریافتی", AppRepository.formatPrice(summary.totalPaid), "تومان", Modifier.weight(1f), OrangeSecondary)
             }
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 StatCard("بدهی دوره", AppRepository.formatPrice(summary.totalDebt), "تومان", Modifier.weight(1f), MaterialTheme.colorScheme.error)
                 StatCard("کل بدهی", AppRepository.formatPrice(totalDebt), "تومان", Modifier.weight(1f), MaterialTheme.colorScheme.error)
             }
@@ -178,22 +184,19 @@ fun AdminDashboardScreen(
             Spacer(modifier = Modifier.height(8.dp))
             Text("عملیات سریع", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
 
-            AdminActionButton(Icons.Filled.NotificationsActive, "سفارش‌های آنلاین + آلارم", "نوتیف یک‌باره — با باشه قطع می‌شود", onNavigateToOrders)
-            AdminActionButton(Icons.Filled.RestaurantMenu, "مدیریت منو (همگام با سرور)", "افزودن/ویرایش/حذف — اپ مشتری به‌روز می‌شود", onNavigateToMenuManage)
-            AdminActionButton(Icons.Filled.Star, "امتیازات پیک", "امتیازهایی که مشتری بعد از تحویل می‌دهد", onNavigateToRatings)
-            AdminActionButton(Icons.Filled.AddShoppingCart, "ثبت سفارش جدید", "انتخاب مشتری از لیست", onNavigateToNewOrder)
-            AdminActionButton(Icons.Filled.People, "مشتریان و بدهی", "افزودن مشتری و تسویه", onNavigateToCustomers)
+            AdminActionButton(Icons.Filled.NotificationsActive, "سفارش‌های آنلاین", "آلارم فقط با باز کردن این صفحه قطع می‌شود", onNavigateToOrders)
+            AdminActionButton(Icons.Filled.RestaurantMenu, "مدیریت منو + دسته‌بندی", "چلو / خورشت / نوشیدنی / مخلفات ...", onNavigateToMenuManage)
+            AdminActionButton(Icons.Filled.Star, "امتیازات پیک", "امتیاز مشتریان", onNavigateToRatings)
+            AdminActionButton(Icons.Filled.AddShoppingCart, "ثبت سفارش (انتخاب مشتری)", "تلفنی / حضوری", onNavigateToNewOrder)
+            AdminActionButton(Icons.Filled.People, "مشتریان و بدهی", "افزودن و تسویه", onNavigateToCustomers)
         }
     }
 }
 
 @Composable
 private fun StatCard(
-    title: String,
-    value: String,
-    subtitle: String,
-    modifier: Modifier = Modifier,
-    color: Color
+    title: String, value: String, subtitle: String,
+    modifier: Modifier = Modifier, color: Color
 ) {
     Card(
         modifier = modifier,
@@ -211,27 +214,17 @@ private fun StatCard(
 
 @Composable
 private fun AdminActionButton(
-    icon: ImageVector,
-    title: String,
-    subtitle: String,
-    onClick: () -> Unit
+    icon: ImageVector, title: String, subtitle: String, onClick: () -> Unit
 ) {
-    Card(
-        onClick = onClick,
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(14.dp)
-    ) {
-        Row(
-            modifier = Modifier.padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(icon, contentDescription = null, tint = GreenMid, modifier = Modifier.size(28.dp))
+    Card(onClick = onClick, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp)) {
+        Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(icon, null, tint = GreenMid, modifier = Modifier.size(28.dp))
             Spacer(modifier = Modifier.width(14.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(title, fontWeight = FontWeight.SemiBold)
                 Text(subtitle, style = MaterialTheme.typography.bodySmall)
             }
-            Icon(Icons.Filled.ChevronLeft, contentDescription = null)
+            Icon(Icons.Filled.ChevronLeft, null)
         }
     }
 }

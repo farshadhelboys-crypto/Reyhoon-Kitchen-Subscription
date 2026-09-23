@@ -6,7 +6,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -37,17 +36,17 @@ fun KitchenOrdersScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
     var orders by remember { mutableStateOf<List<Order>>(emptyList()) }
     var loading by remember { mutableStateOf(false) }
     var lastSeenAt by remember { mutableStateOf(System.currentTimeMillis() - 60_000) }
-    var alertText by remember { mutableStateOf<String?>(null) }
     var online by remember { mutableStateOf(ApiConfig.isConfigured) }
+    var payOrder by remember { mutableStateOf<Order?>(null) }
+
+    // ورود به این صفحه = قطع آلارم
+    LaunchedEffect(Unit) {
+        NotificationHelper.acknowledgeOrdersViewed(context)
+    }
 
     fun formatTs(ts: Long?): String {
         if (ts == null || ts <= 0) return "—"
         return SimpleDateFormat("yyyy/MM/dd HH:mm", Locale("fa")).format(Date(ts))
-    }
-
-    fun dismissAlert() {
-        alertText = null
-        NotificationHelper.stopAlarm(context)
     }
 
     suspend fun refresh(fromPoll: Boolean = false) {
@@ -56,17 +55,17 @@ fun KitchenOrdersScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
             online = ApiClient.health()
             val fresh = ApiClient.fetchNewOrders(lastSeenAt)
             if (fresh.isNotEmpty()) {
-                val n = NotificationHelper.notifyNewOrders(
-                    context,
-                    fresh.map { it.id },
-                    fresh.first().customerName
-                )
-                if (n > 0) {
-                    alertText = "سفارش جدید دارید! $n مورد — ${fresh.first().customerName}"
-                }
+                // اینجا دیگر آلارم نمی‌زنیم چون صفحه باز است؛ فقط lastSeen را جلو می‌بریم
                 lastSeenAt = maxOf(lastSeenAt, fresh.maxOf { it.createdAt })
             }
-            orders = ApiClient.fetchOrders()
+            val remote = ApiClient.fetchOrders()
+            orders = remote
+            // همگام‌سازی حسابداری محلی برای گزارش فروش
+            remote.forEach { r ->
+                val idx = AppRepository.orders.indexOfFirst { it.id == r.id }
+                if (idx >= 0) AppRepository.orders[idx] = r
+                else AppRepository.orders.add(0, r)
+            }
         } else {
             online = false
             orders = AppRepository.orders.toList()
@@ -75,7 +74,6 @@ fun KitchenOrdersScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
     }
 
     LaunchedEffect(Unit) {
-        NotificationHelper.ensureChannels(context)
         refresh()
         while (true) {
             delay(8_000)
@@ -90,18 +88,13 @@ fun KitchenOrdersScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                     Column {
                         Text("سفارش‌های آنلاین", fontWeight = FontWeight.Bold)
                         Text(
-                            if (online) "متصل — هر ۸ ثانیه چک می‌شود"
-                            else if (ApiConfig.isConfigured) "قطع ارتباط"
-                            else "آفلاین",
+                            if (online) "متصل — آلارم قطع شد" else "آفلاین / قطع",
                             style = MaterialTheme.typography.bodySmall
                         )
                     }
                 },
                 navigationIcon = {
-                    IconButton(onClick = {
-                        NotificationHelper.stopAlarm(context)
-                        onBack()
-                    }) {
+                    IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "بازگشت")
                     }
                 },
@@ -121,19 +114,6 @@ fun KitchenOrdersScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
         modifier = modifier
     ) { padding ->
         Column(modifier = Modifier.fillMaxSize().padding(padding)) {
-            alertText?.let { msg ->
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = OrangeSecondary.copy(alpha = 0.25f)),
-                    modifier = Modifier.fillMaxWidth().padding(12.dp)
-                ) {
-                    Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Filled.NotificationsActive, null, tint = OrangeSecondary)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(msg, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-                        TextButton(onClick = { dismissAlert() }) { Text("باشه") }
-                    }
-                }
-            }
             if (loading && orders.isEmpty()) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator()
@@ -148,24 +128,86 @@ fun KitchenOrdersScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     items(orders, key = { it.id }) { order ->
-                        OrderCard(order, ::formatTs) { status ->
-                            scope.launch {
-                                NotificationHelper.stopAlarm(context)
-                                if (ApiConfig.isConfigured) {
-                                    ApiClient.updateOrderStatus(order.id, status, byKitchen = true)
-                                    orders = ApiClient.fetchOrders()
+                        OrderCard(
+                            order = order,
+                            formatTs = ::formatTs,
+                            onStatus = { status ->
+                                scope.launch {
+                                    if (ApiConfig.isConfigured) {
+                                        ApiClient.updateOrderStatus(order.id, status, byKitchen = true)
+                                        orders = ApiClient.fetchOrders()
+                                    } else {
+                                        val idx = AppRepository.orders.indexOfFirst { it.id == order.id }
+                                        if (idx >= 0) {
+                                            AppRepository.orders[idx] = order.copy(status = status)
+                                            orders = AppRepository.orders.toList()
+                                        }
+                                    }
                                 }
-                            }
-                        }
+                            },
+                            onPay = { payOrder = order }
+                        )
                     }
                 }
             }
         }
     }
+
+    payOrder?.let { o ->
+        var amount by remember { mutableStateOf("") }
+        AlertDialog(
+            onDismissRequest = { payOrder = null },
+            title = { Text("ثبت دریافت وجه — ${o.customerName}") },
+            text = {
+                Column {
+                    Text("جمع سفارش: ${AppRepository.formatPrice(o.totalAmount)} تومان")
+                    Text("پرداخت‌شده: ${AppRepository.formatPrice(o.paidAmount)} تومان")
+                    Text(
+                        "باقیمانده: ${AppRepository.formatPrice(o.remaining)} تومان",
+                        fontWeight = FontWeight.Bold,
+                        color = OrangeSecondary
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = amount,
+                        onValueChange = { amount = it.filter { ch -> ch.isDigit() } },
+                        label = { Text("مبلغ دریافتی (تومان)") },
+                        singleLine = true
+                    )
+                }
+            },
+            confirmButton = {
+                Button(onClick = {
+                    val pay = amount.toLongOrNull() ?: 0L
+                    if (pay <= 0) return@Button
+                    scope.launch {
+                        if (ApiConfig.isConfigured) {
+                            ApiClient.recordPayment(o.customerId, pay, "دریافت سفارش ${o.id.take(8)}")
+                            // محلی
+                            AppRepository.recordPayment(o.customerId, pay, o.id)
+                            orders = ApiClient.fetchOrders()
+                        } else {
+                            AppRepository.recordPayment(o.customerId, pay, o.id)
+                            orders = AppRepository.orders.toList()
+                        }
+                        payOrder = null
+                    }
+                }) { Text("ثبت دریافت") }
+            },
+            dismissButton = {
+                TextButton(onClick = { payOrder = null }) { Text("انصراف") }
+            }
+        )
+    }
 }
 
 @Composable
-private fun OrderCard(order: Order, formatTs: (Long?) -> String, onStatus: (String) -> Unit) {
+private fun OrderCard(
+    order: Order,
+    formatTs: (Long?) -> String,
+    onStatus: (String) -> Unit,
+    onPay: () -> Unit
+) {
     Card(shape = RoundedCornerShape(14.dp)) {
         Column(modifier = Modifier.padding(14.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -173,42 +215,45 @@ private fun OrderCard(order: Order, formatTs: (Long?) -> String, onStatus: (Stri
                 AssistChip(onClick = {}, label = { Text(order.statusEnum.labelFa) })
             }
             if (order.customerPhone.isNotBlank()) {
-                Text("تلفن: ${order.customerPhone}", style = MaterialTheme.typography.bodyMedium)
+                Text("تلفن: ${order.customerPhone}")
             }
-            Text("ساعت ثبت: ${formatTs(order.createdAt)}", style = MaterialTheme.typography.bodyMedium)
-            if (order.deliveredAt != null) {
-                Text(
-                    "ساعت تحویل: ${formatTs(order.deliveredAt)}",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = GreenMid
-                )
-            }
-            Spacer(modifier = Modifier.height(6.dp))
-            order.items.forEach { item -> Text("• ${item.foodName} × ${item.quantity}") }
+            Text("ثبت: ${formatTs(order.createdAt)}")
+            if (order.deliveredAt != null) Text("تحویل: ${formatTs(order.deliveredAt)}", color = GreenMid)
+            order.items.forEach { Text("• ${it.foodName} × ${it.quantity}") }
             Text(
-                "مبلغ: ${AppRepository.formatPrice(order.totalAmount)} تومان",
+                "جمع: ${AppRepository.formatPrice(order.totalAmount)} | دریافتی: ${AppRepository.formatPrice(order.paidAmount)}",
                 fontWeight = FontWeight.Bold,
                 color = OrangeSecondary
             )
+            if (order.remaining > 0) {
+                Text(
+                    "باقیمانده: ${AppRepository.formatPrice(order.remaining)} تومان",
+                    color = MaterialTheme.colorScheme.error,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
             Spacer(modifier = Modifier.height(8.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
                 if (order.status == OrderStatus.REGISTERED.key) {
-                    FilledTonalButton(
-                        onClick = { onStatus(OrderStatus.PREPARING.key) },
-                        modifier = Modifier.weight(1f)
-                    ) { Text("آماده‌سازی") }
+                    FilledTonalButton(onClick = { onStatus(OrderStatus.PREPARING.key) }, modifier = Modifier.weight(1f)) {
+                        Text("آماده‌سازی")
+                    }
                 }
                 if (order.status == OrderStatus.PREPARING.key || order.status == OrderStatus.REGISTERED.key) {
-                    FilledTonalButton(
-                        onClick = { onStatus(OrderStatus.SHIPPED.key) },
-                        modifier = Modifier.weight(1f)
-                    ) { Text("ارسال") }
+                    FilledTonalButton(onClick = { onStatus(OrderStatus.SHIPPED.key) }, modifier = Modifier.weight(1f)) {
+                        Text("ارسال")
+                    }
                 }
                 if (order.status != OrderStatus.DELIVERED.key) {
-                    Button(
-                        onClick = { onStatus(OrderStatus.DELIVERED.key) },
-                        modifier = Modifier.weight(1f)
-                    ) { Text("تحویل شد") }
+                    Button(onClick = { onStatus(OrderStatus.DELIVERED.key) }, modifier = Modifier.weight(1f)) {
+                        Text("تحویل")
+                    }
+                }
+            }
+            if (order.remaining > 0) {
+                Spacer(modifier = Modifier.height(6.dp))
+                OutlinedButton(onClick = onPay, modifier = Modifier.fillMaxWidth()) {
+                    Text("ثبت مبلغ دریافتی")
                 }
             }
         }
