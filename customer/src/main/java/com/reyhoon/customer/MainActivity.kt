@@ -4,6 +4,8 @@ import android.Manifest
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import android.content.pm.PackageManager
 import android.media.RingtoneManager
 import android.os.Build
@@ -81,42 +83,21 @@ class MainActivity : ComponentActivity() {
 
     companion object {
         const val CHANNEL = "reyhoon_customer_status"
-
         fun ensureChannel(ctx: Context) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                val ch = NotificationChannel(
-                    CHANNEL,
-                    "وضعیت سفارش ریحون",
-                    NotificationManager.IMPORTANCE_HIGH
-                )
+                val ch = NotificationChannel(CHANNEL, "وضعیت سفارش ریحون", NotificationManager.IMPORTANCE_HIGH)
                 ctx.getSystemService(NotificationManager::class.java)?.createNotificationChannel(ch)
             }
         }
-
         fun notifyStatus(ctx: Context, title: String, body: String) {
             ensureChannel(ctx)
             val n = NotificationCompat.Builder(ctx, CHANNEL)
                 .setSmallIcon(android.R.drawable.ic_dialog_info)
-                .setContentTitle(title)
-                .setContentText(body)
-                .setPriority(NotificationCompat.PRIORITY_HIGH)
-                .setAutoCancel(true)
-                .setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION))
-                .build()
-            try {
-                NotificationManagerCompat.from(ctx).notify(
-                    (System.currentTimeMillis() % Int.MAX_VALUE).toInt(),
-                    n
-                )
-            } catch (_: SecurityException) {
-            }
-            try {
-                RingtoneManager.getRingtone(
-                    ctx,
-                    RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
-                )?.play()
-            } catch (_: Exception) {
-            }
+                .setContentTitle(title).setContentText(body)
+                .setPriority(NotificationCompat.PRIORITY_HIGH).setAutoCancel(true)
+                .setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)).build()
+            try { NotificationManagerCompat.from(ctx).notify((System.currentTimeMillis() % Int.MAX_VALUE).toInt(), n) } catch (_: SecurityException) {}
+            try { RingtoneManager.getRingtone(ctx, RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION))?.play() } catch (_: Exception) {}
         }
     }
 }
@@ -125,19 +106,9 @@ class MainActivity : ComponentActivity() {
 fun CustomerApp() {
     var customer by remember { mutableStateOf<Customer?>(null) }
     var showNewCode by remember { mutableStateOf<String?>(null) }
-
     when {
-        customer == null -> WelcomeScreen(
-            onLoggedIn = { customer = it },
-            onRegistered = { c ->
-                showNewCode = c.subscriptionCode
-                customer = c
-            }
-        )
-        showNewCode != null -> NewCodeDialog(
-            code = showNewCode!!,
-            onDismiss = { showNewCode = null }
-        )
+        customer == null -> WelcomeScreen(onLoggedIn = { customer = it }, onRegistered = { c -> showNewCode = c.subscriptionCode; customer = c })
+        showNewCode != null -> NewCodeDialog(code = showNewCode!!, onDismiss = { showNewCode = null })
         else -> MainTabs(customer = customer!!, onLogout = { customer = null })
     }
 }
@@ -151,64 +122,58 @@ fun NewCodeDialog(code: String, onDismiss: () -> Unit) {
             Column {
                 Text("کد اشتراک خود را یادداشت کنید:")
                 Spacer(modifier = Modifier.height(12.dp))
-                Text(
-                    code,
-                    fontSize = 28.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color(0xFF2E7D32),
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth()
-                )
+                Text(code, fontSize = 28.sp, fontWeight = FontWeight.Bold, color = Color(0xFF2E7D32), textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
                 Spacer(modifier = Modifier.height(8.dp))
                 Text("دفعه بعد با همین کد وارد شوید.")
             }
         },
-        confirmButton = {
-            Button(onClick = onDismiss) { Text("متوجه شدم — بریم منو") }
-        }
+        confirmButton = { Button(onClick = onDismiss) { Text("متوجه شدم — بریم منو") } }
     )
 }
 
 @Composable
-fun WelcomeScreen(
-    onLoggedIn: (Customer) -> Unit,
-    onRegistered: (Customer) -> Unit
-) {
-    var mode by remember { mutableStateOf<String?>(null) }
+fun KitchenContactFooter() {
+    val context = LocalContext.current
+    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
+        Text("آدرس: رشت · توشیبا · خیابان پاستور ۱ · آشپزخانه ریحون", style = MaterialTheme.typography.bodySmall, textAlign = TextAlign.Center, color = Color(0xFF424242))
+        Spacer(modifier = Modifier.height(6.dp))
+        Text("تلفن آشپزخانه: ۰۹۹۱۹۷۲۷۸۴۱", fontWeight = FontWeight.Bold, color = Color(0xFF2E7D32), style = MaterialTheme.typography.bodyMedium)
+        Spacer(modifier = Modifier.height(10.dp))
+        Text("توسعه‌دهنده: فرشاد پورمحمد", style = MaterialTheme.typography.bodySmall, color = Color(0xFF616161))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("@farshad_pm_org", style = MaterialTheme.typography.bodySmall, color = Color(0xFF9E9E9E))
+            Spacer(modifier = Modifier.width(6.dp))
+            TextButton(onClick = {
+                try { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://t.me/farshad_pm_org"))) } catch (_: Exception) {}
+            }) { Text("✈ تلگرام", color = Color(0xFF0088CC), fontWeight = FontWeight.Bold) }
+        }
+    }
+}
 
+@Composable
+fun WelcomeScreen(onLoggedIn: (Customer) -> Unit, onRegistered: (Customer) -> Unit) {
+    var mode by remember { mutableStateOf<String?>(null) }
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color(0xFFF1F8E9))
-            .padding(24.dp)
-            .verticalScroll(rememberScrollState()),
+        modifier = Modifier.fillMaxSize().background(Color(0xFFF1F8E9)).padding(24.dp).verticalScroll(rememberScrollState()),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
         Text("ریحان", fontSize = 34.sp, fontWeight = FontWeight.Bold, color = Color(0xFF2E7D32))
         Text("سفارش آنلاین غذا", fontWeight = FontWeight.SemiBold, fontSize = 18.sp)
         Spacer(modifier = Modifier.height(28.dp))
-
         if (mode == null) {
-            Button(
-                onClick = { mode = "new" },
-                modifier = Modifier.fillMaxWidth().height(54.dp),
-                shape = RoundedCornerShape(14.dp)
-            ) { Text("مشتری جدید هستم", fontWeight = FontWeight.Bold, fontSize = 16.sp) }
+            Button(onClick = { mode = "new" }, modifier = Modifier.fillMaxWidth().height(54.dp), shape = RoundedCornerShape(14.dp)) {
+                Text("مشتری جدید هستم", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+            }
             Spacer(modifier = Modifier.height(12.dp))
-            OutlinedButton(
-                onClick = { mode = "existing" },
-                modifier = Modifier.fillMaxWidth().height(54.dp),
-                shape = RoundedCornerShape(14.dp)
-            ) { Text("کد اشتراک دارم", fontWeight = FontWeight.Bold, fontSize = 16.sp) }
+            OutlinedButton(onClick = { mode = "existing" }, modifier = Modifier.fillMaxWidth().height(54.dp), shape = RoundedCornerShape(14.dp)) {
+                Text("کد اشتراک دارم", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+            }
         }
-
-        if (mode == "existing") {
-            ExistingLogin(onLoggedIn = onLoggedIn, onBack = { mode = null })
-        }
-        if (mode == "new") {
-            NewRegister(onRegistered = onRegistered, onBack = { mode = null })
-        }
+        if (mode == "existing") ExistingLogin(onLoggedIn = onLoggedIn, onBack = { mode = null })
+        if (mode == "new") NewRegister(onRegistered = onRegistered, onBack = { mode = null })
+        Spacer(modifier = Modifier.height(32.dp))
+        KitchenContactFooter()
     }
 }
 
@@ -218,32 +183,13 @@ fun ExistingLogin(onLoggedIn: (Customer) -> Unit, onBack: () -> Unit) {
     var error by remember { mutableStateOf<String?>(null) }
     var loading by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
-
     Text("ورود با کد اشتراک", fontWeight = FontWeight.Bold, fontSize = 18.sp)
     Spacer(modifier = Modifier.height(12.dp))
-    OutlinedTextField(
-        value = code,
-        onValueChange = { code = it.filter { ch -> ch.isDigit() }; error = null },
-        label = { Text("کد اشتراک (فقط عدد)") },
-        singleLine = true,
-        modifier = Modifier.fillMaxWidth()
-    )
+    OutlinedTextField(value = code, onValueChange = { code = it.filter { ch -> ch.isDigit() }; error = null }, label = { Text("کد اشتراک (فقط عدد)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
     error?.let { Text(it, color = Color(0xFFC62828), fontWeight = FontWeight.Bold) }
     Spacer(modifier = Modifier.height(12.dp))
-    Button(
-        onClick = {
-            scope.launch {
-                loading = true
-                val c = ApiClient.login(code)
-                loading = false
-                if (c != null) onLoggedIn(c) else error = "کد یافت نشد"
-            }
-        },
-        enabled = code.isNotBlank() && !loading,
-        modifier = Modifier.fillMaxWidth().height(50.dp)
-    ) {
-        if (loading) CircularProgressIndicator(modifier = Modifier.size(22.dp), color = Color.White)
-        else Text("ورود", fontWeight = FontWeight.Bold)
+    Button(onClick = { scope.launch { loading = true; val c = ApiClient.login(code); loading = false; if (c != null) onLoggedIn(c) else error = "کد یافت نشد" } }, enabled = code.isNotBlank() && !loading, modifier = Modifier.fillMaxWidth().height(50.dp)) {
+        if (loading) CircularProgressIndicator(modifier = Modifier.size(22.dp), color = Color.White) else Text("ورود", fontWeight = FontWeight.Bold)
     }
     TextButton(onClick = onBack) { Text("بازگشت") }
 }
@@ -257,7 +203,6 @@ fun NewRegister(onRegistered: (Customer) -> Unit, onBack: () -> Unit) {
     var error by remember { mutableStateOf<String?>(null) }
     var loading by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
-
     Text("ثبت‌نام سریع", fontWeight = FontWeight.Bold, fontSize = 18.sp)
     Text("فوراً کد اشتراک می‌گیرید و می‌توانید سفارش دهید", style = MaterialTheme.typography.bodyMedium)
     Spacer(modifier = Modifier.height(12.dp))
@@ -267,20 +212,8 @@ fun NewRegister(onRegistered: (Customer) -> Unit, onBack: () -> Unit) {
     OutlinedTextField(value = city, onValueChange = { city = it }, label = { Text("شهر") }, singleLine = true, modifier = Modifier.fillMaxWidth())
     error?.let { Text(it, color = Color(0xFFC62828), fontWeight = FontWeight.Bold) }
     Spacer(modifier = Modifier.height(12.dp))
-    Button(
-        onClick = {
-            scope.launch {
-                loading = true
-                val c = ApiClient.register(name.trim(), phone.trim(), street.trim(), city.trim())
-                loading = false
-                if (c != null) onRegistered(c) else error = "خطا در ثبت‌نام — اینترنت را چک کنید"
-            }
-        },
-        enabled = name.isNotBlank() && phone.length >= 10 && !loading,
-        modifier = Modifier.fillMaxWidth().height(50.dp)
-    ) {
-        if (loading) CircularProgressIndicator(modifier = Modifier.size(22.dp), color = Color.White)
-        else Text("ثبت و ورود", fontWeight = FontWeight.Bold)
+    Button(onClick = { scope.launch { loading = true; val c = ApiClient.register(name.trim(), phone.trim(), street.trim(), city.trim()); loading = false; if (c != null) onRegistered(c) else error = "خطا در ثبت‌نام — اینترنت را چک کنید" } }, enabled = name.isNotBlank() && phone.length >= 10 && !loading, modifier = Modifier.fillMaxWidth().height(50.dp)) {
+        if (loading) CircularProgressIndicator(modifier = Modifier.size(22.dp), color = Color.White) else Text("ثبت و ورود", fontWeight = FontWeight.Bold)
     }
     TextButton(onClick = onBack) { Text("بازگشت") }
 }
@@ -292,25 +225,9 @@ fun MainTabs(customer: Customer, onLogout: () -> Unit) {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = {
-                    Column {
-                        Text("سلام ${customer.name}", fontWeight = FontWeight.Bold)
-                        Text(
-                            "کد: ${customer.subscriptionCode ?: "—"} | بدهی: ${fmt(customer.debt)}",
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                    }
-                },
-                actions = {
-                    IconButton(onClick = onLogout) {
-                        Icon(Icons.AutoMirrored.Filled.Logout, null)
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Color(0xFF2E7D32),
-                    titleContentColor = Color.White,
-                    actionIconContentColor = Color.White
-                )
+                title = { Column { Text("سلام ${customer.name}", fontWeight = FontWeight.Bold); Text("کد: ${customer.subscriptionCode ?: "—"} | بدهی: ${fmt(customer.debt)}", style = MaterialTheme.typography.bodySmall) } },
+                actions = { IconButton(onClick = onLogout) { Icon(Icons.AutoMirrored.Filled.Logout, null) } },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color(0xFF2E7D32), titleContentColor = Color.White, actionIconContentColor = Color.White)
             )
         },
         bottomBar = {
@@ -321,10 +238,7 @@ fun MainTabs(customer: Customer, onLogout: () -> Unit) {
         }
     ) { padding ->
         Box(modifier = Modifier.padding(padding)) {
-            when (tab) {
-                0 -> MenuOrderTab(customer)
-                1 -> OrdersTab(customer)
-            }
+            when (tab) { 0 -> MenuOrderTab(customer); 1 -> OrdersTab(customer) }
         }
     }
 }
@@ -335,58 +249,27 @@ fun MenuOrderTab(customer: Customer) {
     var qty by remember { mutableStateOf<Map<String, Int>>(emptyMap()) }
     var msg by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
-
-    LaunchedEffect(Unit) {
-        while (true) {
-            menu = ApiClient.menu()
-            delay(15_000)
-        }
-    }
-
-    val cart = menu.mapNotNull { f ->
-        val q = qty[f.id] ?: 0
-        if (q > 0) OrderItem(f.id, f.name, f.price, q) else null
-    }
+    LaunchedEffect(Unit) { while (true) { menu = ApiClient.menu(); delay(15_000) } }
+    val cart = menu.mapNotNull { f -> val q = qty[f.id] ?: 0; if (q > 0) OrderItem(f.id, f.name, f.price, q) else null }
     val total = cart.sumOf { it.unitPrice * it.quantity }
     val grouped = menu.groupBy { it.category.ifBlank { "عمومی" } }
-
     Column(modifier = Modifier.fillMaxSize().padding(12.dp)) {
         Text("آدرس: ${customer.address.full()}", fontWeight = FontWeight.SemiBold)
-        if (customer.credit > 0) {
-            Text(
-                "اعتبار: ${fmt(customer.credit)} تومان از سفارش کسر می‌شود",
-                color = Color(0xFF2E7D32),
-                fontWeight = FontWeight.Bold
-            )
-        }
+        if (customer.credit > 0) Text("اعتبار: ${fmt(customer.credit)} تومان از سفارش کسر می‌شود", color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold)
         Spacer(modifier = Modifier.height(8.dp))
         LazyColumn(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             grouped.forEach { (cat, list) ->
-                item {
-                    Text(cat, fontWeight = FontWeight.Bold, color = Color(0xFF2E7D32),
-                        modifier = Modifier.padding(vertical = 4.dp))
-                }
+                item { Text(cat, fontWeight = FontWeight.Bold, color = Color(0xFF2E7D32), modifier = Modifier.padding(vertical = 4.dp)) }
                 items(list, key = { it.id }) { f ->
                     Card(shape = RoundedCornerShape(12.dp)) {
-                        Row(
-                            modifier = Modifier.padding(12.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
+                        Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(f.name, fontWeight = FontWeight.Bold)
                                 Text("${fmt(f.price)} تومان", color = Color(0xFFE65100), fontWeight = FontWeight.Bold)
                             }
-                            IconButton(onClick = {
-                                qty = qty.toMutableMap().apply {
-                                    put(f.id, ((qty[f.id] ?: 0) - 1).coerceAtLeast(0))
-                                }
-                            }) { Icon(Icons.Filled.Remove, null) }
+                            IconButton(onClick = { qty = qty.toMutableMap().apply { put(f.id, ((qty[f.id] ?: 0) - 1).coerceAtLeast(0)) } }) { Icon(Icons.Filled.Remove, null) }
                             Text("${qty[f.id] ?: 0}", fontWeight = FontWeight.Bold)
-                            IconButton(onClick = {
-                                qty = qty.toMutableMap().apply {
-                                    put(f.id, (qty[f.id] ?: 0) + 1)
-                                }
-                            }) { Icon(Icons.Filled.Add, null) }
+                            IconButton(onClick = { qty = qty.toMutableMap().apply { put(f.id, (qty[f.id] ?: 0) + 1) } }) { Icon(Icons.Filled.Add, null) }
                         }
                     }
                 }
@@ -394,16 +277,7 @@ fun MenuOrderTab(customer: Customer) {
         }
         if (total > 0) {
             Text("جمع: ${fmt(total)} تومان", fontWeight = FontWeight.Bold, fontSize = 18.sp)
-            Button(
-                onClick = {
-                    scope.launch {
-                        val ok = ApiClient.placeOrder(customer.id, cart)
-                        msg = if (ok) "سفارش ثبت شد ✓ آشپزخانه مطلع شد" else "خطا در ثبت"
-                        if (ok) qty = emptyMap()
-                    }
-                },
-                modifier = Modifier.fillMaxWidth().height(50.dp)
-            ) { Text("ثبت سفارش", fontWeight = FontWeight.Bold) }
+            Button(onClick = { scope.launch { val ok = ApiClient.placeOrder(customer.id, cart); msg = if (ok) "سفارش ثبت شد ✓ آشپزخانه مطلع شد" else "خطا در ثبت"; if (ok) qty = emptyMap() } }, modifier = Modifier.fillMaxWidth().height(50.dp)) { Text("ثبت سفارش", fontWeight = FontWeight.Bold) }
         }
         msg?.let { Text(it, fontWeight = FontWeight.Bold, color = Color(0xFF2E7D32)) }
     }
@@ -417,16 +291,15 @@ fun OrdersTab(customer: Customer) {
     var statusBanner by remember { mutableStateOf<String?>(null) }
     var knownStatus by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
     val scope = rememberCoroutineScope()
-
     LaunchedEffect(customer.id) {
         while (true) {
             val list = ApiClient.orders(customer.id)
             for (o in list) {
                 val prev = knownStatus[o.id]
                 if (prev != null && prev != o.status) {
-                    val msg = "وضعیت سفارش: ${o.statusFa}"
-                    statusBanner = msg
-                    MainActivity.notifyStatus(context, "ریحون — به‌روزرسانی سفارش", msg)
+                    val m = "وضعیت سفارش: ${o.statusFa}"
+                    statusBanner = m
+                    MainActivity.notifyStatus(context, "ریحون — به‌روزرسانی سفارش", m)
                 }
             }
             knownStatus = list.associate { it.id to it.status }
@@ -434,30 +307,18 @@ fun OrdersTab(customer: Customer) {
             delay(8_000)
         }
     }
-
-    fun ts(t: Long?): String =
-        if (t == null || t <= 0) "—"
-        else SimpleDateFormat("yyyy/MM/dd HH:mm", Locale("fa")).format(Date(t))
-
-    LazyColumn(
-        contentPadding = PaddingValues(12.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
-    ) {
+    fun ts(t: Long?): String = if (t == null || t <= 0) "—" else SimpleDateFormat("yyyy/MM/dd HH:mm", Locale("fa")).format(Date(t))
+    LazyColumn(contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         item {
             statusBanner?.let {
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = Color(0xFFE8F5E9)),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
+                Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFE8F5E9)), modifier = Modifier.fillMaxWidth()) {
                     Text(it, modifier = Modifier.padding(12.dp), fontWeight = FontWeight.Bold, color = Color(0xFF2E7D32))
                 }
                 Spacer(modifier = Modifier.height(8.dp))
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("سفارش‌های من", fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-                IconButton(onClick = { scope.launch { orders = ApiClient.orders(customer.id) } }) {
-                    Icon(Icons.Filled.Refresh, null)
-                }
+                IconButton(onClick = { scope.launch { orders = ApiClient.orders(customer.id) } }) { Icon(Icons.Filled.Refresh, null) }
             }
         }
         items(orders, key = { it.id }) { o ->
@@ -467,49 +328,20 @@ fun OrdersTab(customer: Customer) {
                     Text("ثبت: ${ts(o.createdAt)}")
                     if (o.deliveredAt != null) Text("تحویل: ${ts(o.deliveredAt)}")
                     o.items.forEach { Text("• ${it.foodName} × ${it.quantity}") }
-                    Text(
-                        "${fmt(o.totalAmount)} تومان",
-                        fontWeight = FontWeight.Bold,
-                        color = Color(0xFFE65100)
-                    )
+                    Text("${fmt(o.totalAmount)} تومان", fontWeight = FontWeight.Bold, color = Color(0xFFE65100))
                     if (o.status != "delivered") {
                         Spacer(modifier = Modifier.height(8.dp))
-                        Button(
-                            onClick = {
-                                scope.launch {
-                                    if (ApiClient.confirmDelivered(o.id)) {
-                                        orders = ApiClient.orders(customer.id)
-                                        rateOrderId = o.id
-                                    }
-                                }
-                            },
-                            modifier = Modifier.fillMaxWidth()
-                        ) { Text("تحویل گرفتم", fontWeight = FontWeight.Bold) }
+                        Button(onClick = { scope.launch { if (ApiClient.confirmDelivered(o.id)) { orders = ApiClient.orders(customer.id); rateOrderId = o.id } } }, modifier = Modifier.fillMaxWidth()) { Text("تحویل گرفتم", fontWeight = FontWeight.Bold) }
                     } else if (!o.rated) {
                         Spacer(modifier = Modifier.height(8.dp))
-                        OutlinedButton(
-                            onClick = { rateOrderId = o.id },
-                            modifier = Modifier.fillMaxWidth()
-                        ) { Text("به پیک امتیاز بده") }
-                    } else {
-                        Text("امتیاز ثبت شد ✓", color = Color(0xFF2E7D32))
-                    }
+                        OutlinedButton(onClick = { rateOrderId = o.id }, modifier = Modifier.fillMaxWidth()) { Text("به پیک امتیاز بده") }
+                    } else Text("امتیاز ثبت شد ✓", color = Color(0xFF2E7D32))
                 }
             }
         }
     }
-
     rateOrderId?.let { oid ->
-        RateDialog(
-            onDismiss = { rateOrderId = null },
-            onSubmit = { stars, comment ->
-                scope.launch {
-                    ApiClient.rateOrder(oid, stars, comment)
-                    orders = ApiClient.orders(customer.id)
-                    rateOrderId = null
-                }
-            }
-        )
+        RateDialog(onDismiss = { rateOrderId = null }, onSubmit = { stars, comment -> scope.launch { ApiClient.rateOrder(oid, stars, comment); orders = ApiClient.orders(customer.id); rateOrderId = null } })
     }
 }
 
@@ -525,29 +357,15 @@ fun RateDialog(onDismiss: () -> Unit, onSubmit: (Int, String) -> Unit) {
                 Row(horizontalArrangement = Arrangement.Center, modifier = Modifier.fillMaxWidth()) {
                     (1..5).forEach { n ->
                         IconButton(onClick = { stars = n }) {
-                            Icon(
-                                Icons.Filled.Star,
-                                contentDescription = null,
-                                tint = if (n <= stars) Color(0xFFFFC107) else Color(0xFFBDBDBD),
-                                modifier = Modifier.size(36.dp)
-                            )
+                            Icon(Icons.Filled.Star, null, tint = if (n <= stars) Color(0xFFFFC107) else Color(0xFFBDBDBD), modifier = Modifier.size(36.dp))
                         }
                     }
                 }
-                OutlinedTextField(
-                    value = comment,
-                    onValueChange = { comment = it },
-                    label = { Text("نظر (اختیاری)") },
-                    modifier = Modifier.fillMaxWidth()
-                )
+                OutlinedTextField(value = comment, onValueChange = { comment = it }, label = { Text("نظر (اختیاری)") }, modifier = Modifier.fillMaxWidth())
             }
         },
-        confirmButton = {
-            Button(onClick = { onSubmit(stars, comment) }) { Text("ثبت امتیاز") }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("بعداً") }
-        }
+        confirmButton = { Button(onClick = { onSubmit(stars, comment) }) { Text("ثبت امتیاز") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("بعداً") } }
     )
 }
 
