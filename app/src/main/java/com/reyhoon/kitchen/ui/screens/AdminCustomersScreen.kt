@@ -75,7 +75,11 @@ fun AdminCustomersScreen(
                                     Text(c.name, fontWeight = FontWeight.SemiBold)
                                     Text(c.phone, style = MaterialTheme.typography.bodySmall)
                                     if (!c.subscriptionCode.isNullOrBlank()) {
-                                        Text("کد: ${c.subscriptionCode}", style = MaterialTheme.typography.bodySmall, color = GreenPrimary)
+                                        Text(
+                                            "کد: ${c.subscriptionCode}",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = GreenPrimary
+                                        )
                                     }
                                     Text(
                                         c.address.fullAddress(),
@@ -87,20 +91,44 @@ fun AdminCustomersScreen(
                                     Icon(Icons.Default.Delete, null, tint = MaterialTheme.colorScheme.error)
                                 }
                             }
+
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                if (c.debt > 0) {
+                                    AssistChip(
+                                        onClick = { },
+                                        label = { Text("بدهی: ${AppRepository.formatPrice(c.debt)}") },
+                                        colors = AssistChipDefaults.assistChipColors(
+                                            labelColor = MaterialTheme.colorScheme.error
+                                        )
+                                    )
+                                }
+                                if (c.credit > 0) {
+                                    AssistChip(
+                                        onClick = { },
+                                        label = { Text("اعتبار: ${AppRepository.formatPrice(c.credit)}") },
+                                        colors = AssistChipDefaults.assistChipColors(
+                                            labelColor = GreenPrimary
+                                        )
+                                    )
+                                }
+                                if (c.debt == 0L && c.credit == 0L) {
+                                    AssistChip(
+                                        onClick = { },
+                                        label = { Text("تسویه ✓") }
+                                    )
+                                }
+                            }
+
                             if (c.debt > 0) {
                                 Spacer(modifier = Modifier.height(8.dp))
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Text(
-                                        "بدهی: ${AppRepository.formatPrice(c.debt)} تومان",
-                                        color = OrangeSecondary,
-                                        fontWeight = FontWeight.Medium,
-                                        modifier = Modifier.weight(1f)
-                                    )
-                                    FilledTonalButton(onClick = { paymentCustomer = c }) {
-                                        Icon(Icons.Default.Payments, null, modifier = Modifier.size(16.dp))
-                                        Spacer(modifier = Modifier.width(4.dp))
-                                        Text("تسویه")
-                                    }
+                                FilledTonalButton(
+                                    onClick = { paymentCustomer = c },
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Icon(Icons.Default.Payments, null, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("تسویه بدهی")
                                 }
                             }
                         }
@@ -182,12 +210,21 @@ private fun PaymentDialog(customer: Customer, onDismiss: () -> Unit, onPay: (Lon
         text = {
             Column {
                 Text("بدهی فعلی: ${AppRepository.formatPrice(customer.debt)} تومان")
+                if (customer.credit > 0) {
+                    Text(
+                        "اعتبار فعلی: ${AppRepository.formatPrice(customer.credit)} تومان",
+                        color = GreenPrimary
+                    )
+                }
                 Spacer(modifier = Modifier.height(12.dp))
                 OutlinedTextField(
                     value = amount,
                     onValueChange = { amount = it.filter { c -> c.isDigit() } },
                     label = { Text("مبلغ پرداختی (تومان)") },
-                    singleLine = true
+                    singleLine = true,
+                    supportingText = {
+                        Text("اگر بیشتر از بدهی باشد، مازاد به اعتبار مشتری اضافه می‌شود")
+                    }
                 )
             }
         },

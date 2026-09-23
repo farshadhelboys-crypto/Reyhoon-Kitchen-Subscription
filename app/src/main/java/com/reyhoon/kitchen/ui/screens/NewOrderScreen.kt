@@ -33,7 +33,7 @@ fun NewOrderScreen(
     var selectedCustomer by remember { mutableStateOf<Customer?>(null) }
     var quantities by remember { mutableStateOf<Map<String, Int>>(emptyMap()) }
     var paidNow by remember { mutableStateOf("") }
-    var showConfirm by remember { mutableStateOf(false) }
+    var resultMessage by remember { mutableStateOf<String?>(null) }
 
     val cartItems = remember(quantities, menu) {
         menu.mapNotNull { food ->
@@ -42,6 +42,8 @@ fun NewOrderScreen(
         }
     }
     val total = cartItems.sumOf { it.total }
+    val customerCredit = selectedCustomer?.credit ?: 0L
+    val afterCredit = (total - customerCredit).coerceAtLeast(0)
 
     Scaffold(
         topBar = {
@@ -67,7 +69,6 @@ fun NewOrderScreen(
                 .padding(padding)
                 .padding(16.dp)
         ) {
-            // Select customer
             Text("انتخاب مشتری", fontWeight = FontWeight.SemiBold)
             Spacer(modifier = Modifier.height(8.dp))
             if (customers.isEmpty()) {
@@ -76,7 +77,13 @@ fun NewOrderScreen(
                 var expanded by remember { mutableStateOf(false) }
                 ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }) {
                     OutlinedTextField(
-                        value = selectedCustomer?.name ?: "انتخاب کنید",
+                        value = selectedCustomer?.let {
+                            buildString {
+                                append(it.name)
+                                if (it.credit > 0) append(" | اعتبار: ${AppRepository.formatPrice(it.credit)}")
+                                if (it.debt > 0) append(" | بدهی: ${AppRepository.formatPrice(it.debt)}")
+                            }
+                        } ?: "انتخاب کنید",
                         onValueChange = {},
                         readOnly = true,
                         modifier = Modifier.menuAnchor().fillMaxWidth(),
@@ -85,7 +92,25 @@ fun NewOrderScreen(
                     ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
                         customers.forEach { c ->
                             DropdownMenuItem(
-                                text = { Text("${c.name} (${c.phone})") },
+                                text = {
+                                    Column {
+                                        Text("${c.name} (${c.phone})")
+                                        if (c.credit > 0) {
+                                            Text(
+                                                "اعتبار: ${AppRepository.formatPrice(c.credit)} تومان",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = GreenPrimary
+                                            )
+                                        }
+                                        if (c.debt > 0) {
+                                            Text(
+                                                "بدهی: ${AppRepository.formatPrice(c.debt)} تومان",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.error
+                                            )
+                                        }
+                                    }
+                                },
                                 onClick = {
                                     selectedCustomer = c
                                     expanded = false
@@ -93,6 +118,21 @@ fun NewOrderScreen(
                             )
                         }
                     }
+                }
+            }
+
+            if (selectedCustomer != null && customerCredit > 0) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = GreenPrimary.copy(alpha = 0.12f)),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text(
+                        "این مشتری ${AppRepository.formatPrice(customerCredit)} تومان اعتبار دارد و از مبلغ سفارش کسر می‌شود.",
+                        modifier = Modifier.padding(12.dp),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = GreenPrimary
+                    )
                 }
             }
 
@@ -120,23 +160,38 @@ fun NewOrderScreen(
             if (total > 0) {
                 HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
                 Text(
-                    "جمع کل: ${AppRepository.formatPrice(total)} تومان",
+                    "جمع غذا: ${AppRepository.formatPrice(total)} تومان",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     color = OrangeSecondary
                 )
+                if (customerCredit > 0) {
+                    Text(
+                        "پس از کسر اعتبار: ${AppRepository.formatPrice(afterCredit)} تومان",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = GreenPrimary
+                    )
+                }
                 Spacer(modifier = Modifier.height(8.dp))
                 OutlinedTextField(
                     value = paidNow,
                     onValueChange = { paidNow = it.filter { c -> c.isDigit() } },
-                    label = { Text("مبلغ پرداختی الان (اختیاری)") },
+                    label = { Text("مبلغ دریافتی از مشتری (تومان)") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
-                    supportingText = { Text("اگر کمتر از جمع باشد، مابه‌التفاوت به بدهی اضافه می‌شود") }
+                    supportingText = {
+                        Text("می‌توانید بیشتر از مبلغ وارد کنید → مازاد به‌عنوان اعتبار مشتری ذخیره می‌شود")
+                    }
                 )
                 Spacer(modifier = Modifier.height(12.dp))
                 Button(
-                    onClick = { showConfirm = true },
+                    onClick = {
+                        val c = selectedCustomer ?: return@Button
+                        val paid = paidNow.toLongOrNull() ?: 0L
+                        val result = AppRepository.createOrder(c, cartItems, paid)
+                        resultMessage = result.message
+                        selectedCustomer = AppRepository.findCustomer(c.id)
+                    },
                     modifier = Modifier.fillMaxWidth().height(50.dp),
                     enabled = selectedCustomer != null && cartItems.isNotEmpty(),
                     shape = RoundedCornerShape(12.dp)
@@ -147,35 +202,19 @@ fun NewOrderScreen(
         }
     }
 
-    if (showConfirm && selectedCustomer != null) {
-        val paid = paidNow.toLongOrNull() ?: 0L
-        val remaining = (total - paid).coerceAtLeast(0)
+    resultMessage?.let { msg ->
         AlertDialog(
-            onDismissRequest = { showConfirm = false },
-            title = { Text("تأیید سفارش") },
-            text = {
-                Column {
-                    Text("مشتری: ${selectedCustomer!!.name}")
-                    Text("جمع: ${AppRepository.formatPrice(total)} تومان")
-                    Text("پرداخت الان: ${AppRepository.formatPrice(paid)} تومان")
-                    if (remaining > 0) {
-                        Text(
-                            "بدهی جدید: ${AppRepository.formatPrice(remaining)} تومان",
-                            color = MaterialTheme.colorScheme.error,
-                            fontWeight = FontWeight.Medium
-                        )
-                    }
-                }
+            onDismissRequest = {
+                resultMessage = null
+                onBack()
             },
+            title = { Text("نتیجه ثبت سفارش") },
+            text = { Text(msg) },
             confirmButton = {
                 Button(onClick = {
-                    AppRepository.createOrder(selectedCustomer!!, cartItems, paid)
-                    showConfirm = false
+                    resultMessage = null
                     onBack()
-                }) { Text("ثبت نهایی") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showConfirm = false }) { Text("انصراف") }
+                }) { Text("باشه") }
             }
         )
     }
@@ -190,7 +229,11 @@ private fun FoodQtyRow(food: FoodItem, qty: Int, onChange: (Int) -> Unit) {
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(food.name, fontWeight = FontWeight.Medium)
-                Text("${AppRepository.formatPrice(food.price)} تومان", style = MaterialTheme.typography.bodySmall, color = OrangeSecondary)
+                Text(
+                    "${AppRepository.formatPrice(food.price)} تومان",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = OrangeSecondary
+                )
             }
             IconButton(onClick = { onChange(qty - 1) }, enabled = qty > 0) {
                 Icon(Icons.Default.Remove, null)
