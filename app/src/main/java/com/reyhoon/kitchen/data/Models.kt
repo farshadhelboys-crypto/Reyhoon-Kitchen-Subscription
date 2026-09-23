@@ -8,7 +8,10 @@ data class Customer(
     val phone: String,
     val address: Address,
     val subscriptionCode: String? = null,
-    val debt: Long = 0L, // remaining debt in Toman
+    /** مبلغی که مشتری به آشپزخانه بدهکار است */
+    val debt: Long = 0L,
+    /** اعتبار مشتری: پولی که بیشتر پرداخت کرده و در سفارش بعدی کسر می‌شود */
+    val credit: Long = 0L,
     val notes: String = "",
     val createdAt: Long = System.currentTimeMillis()
 )
@@ -30,7 +33,7 @@ data class FoodItem(
     val id: String = UUID.randomUUID().toString(),
     val name: String,
     val description: String = "",
-    val price: Long, // Toman
+    val price: Long,
     val category: String = "عمومی",
     val isAvailable: Boolean = true
 )
@@ -51,6 +54,8 @@ data class Order(
     val items: List<OrderItem>,
     val totalAmount: Long,
     val paidAmount: Long = 0L,
+    /** مبلغ کسر شده از اعتبار قبلی مشتری */
+    val creditApplied: Long = 0L,
     val createdAt: Long = System.currentTimeMillis(),
     val note: String = ""
 ) {
@@ -62,16 +67,25 @@ data class Order(
 data class Payment(
     val id: String = UUID.randomUUID().toString(),
     val customerId: String,
-    val orderId: String? = null, // null = general debt payment
+    val orderId: String? = null,
     val amount: Long,
     val createdAt: Long = System.currentTimeMillis(),
     val note: String = ""
 )
 
 data class SalesSummary(
-    val period: String, // "روزانه" | "هفتگی" | "ماهانه"
+    val period: String,
     val totalSales: Long,
     val totalPaid: Long,
     val totalDebt: Long,
     val orderCount: Int
+)
+
+/** نتیجه ثبت سفارش برای نمایش پیام به ادمین */
+data class OrderResult(
+    val order: Order,
+    val creditApplied: Long,
+    val newCredit: Long,
+    val newDebt: Long,
+    val message: String
 )
