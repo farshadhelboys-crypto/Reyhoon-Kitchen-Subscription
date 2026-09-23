@@ -46,12 +46,9 @@ object ApiClient {
             val ok = c.responseCode == 200
             c.disconnect()
             ok
-        } catch (_: Exception) {
-            false
-        }
+        } catch (_: Exception) { false }
     }
 
-    // ---------- Menu (sync با Worker) ----------
     suspend fun fetchMenu(): List<FoodItem> = withContext(Dispatchers.IO) {
         if (!ApiConfig.isConfigured) return@withContext emptyList()
         try {
@@ -71,71 +68,45 @@ object ApiClient {
                     isAvailable = o.optBoolean("isAvailable", true)
                 )
             }
-        } catch (_: Exception) {
-            emptyList()
-        }
+        } catch (_: Exception) { emptyList() }
     }
 
     suspend fun createMenuItem(item: FoodItem): FoodItem? = withContext(Dispatchers.IO) {
         if (!ApiConfig.isConfigured) return@withContext null
         try {
             val c = conn("/api/menu", "POST", admin = true)
-            writeJson(
-                c,
-                JSONObject()
-                    .put("name", item.name)
-                    .put("description", item.description)
-                    .put("price", item.price)
-                    .put("category", item.category)
-                    .put("isAvailable", item.isAvailable)
-            )
+            writeJson(c, JSONObject()
+                .put("name", item.name).put("description", item.description)
+                .put("price", item.price).put("category", item.category)
+                .put("isAvailable", item.isAvailable))
             val body = readBody(c)
             val code = c.responseCode
             c.disconnect()
             if (code !in 200..299) return@withContext null
             val o = JSONObject(body)
-            FoodItem(
-                id = o.optString("id", item.id),
-                name = o.optString("name", item.name),
-                description = o.optString("description", item.description),
-                price = o.optLong("price", item.price),
-                category = o.optString("category", item.category),
-                isAvailable = o.optBoolean("isAvailable", true)
-            )
-        } catch (_: Exception) {
-            null
-        }
+            FoodItem(o.optString("id", item.id), o.optString("name", item.name),
+                o.optString("description", item.description), o.optLong("price", item.price),
+                o.optString("category", item.category), o.optBoolean("isAvailable", true))
+        } catch (_: Exception) { null }
     }
 
     suspend fun updateMenuItem(item: FoodItem): FoodItem? = withContext(Dispatchers.IO) {
         if (!ApiConfig.isConfigured) return@withContext null
         try {
             val c = conn("/api/menu/${item.id}", "PUT", admin = true)
-            writeJson(
-                c,
-                JSONObject()
-                    .put("name", item.name)
-                    .put("description", item.description)
-                    .put("price", item.price)
-                    .put("category", item.category)
-                    .put("isAvailable", item.isAvailable)
-            )
+            writeJson(c, JSONObject()
+                .put("name", item.name).put("description", item.description)
+                .put("price", item.price).put("category", item.category)
+                .put("isAvailable", item.isAvailable))
             val body = readBody(c)
             val code = c.responseCode
             c.disconnect()
             if (code !in 200..299) return@withContext null
             val o = JSONObject(body)
-            FoodItem(
-                id = o.optString("id", item.id),
-                name = o.optString("name", item.name),
-                description = o.optString("description", item.description),
-                price = o.optLong("price", item.price),
-                category = o.optString("category", item.category),
-                isAvailable = o.optBoolean("isAvailable", true)
-            )
-        } catch (_: Exception) {
-            null
-        }
+            FoodItem(o.optString("id", item.id), o.optString("name", item.name),
+                o.optString("description", item.description), o.optLong("price", item.price),
+                o.optString("category", item.category), o.optBoolean("isAvailable", true))
+        } catch (_: Exception) { null }
     }
 
     suspend fun deleteMenuItem(id: String): Boolean = withContext(Dispatchers.IO) {
@@ -145,12 +116,9 @@ object ApiClient {
             val ok = c.responseCode in 200..299
             c.disconnect()
             ok
-        } catch (_: Exception) {
-            false
-        }
+        } catch (_: Exception) { false }
     }
 
-    // ---------- Orders ----------
     suspend fun fetchOrders(customerId: String? = null): List<Order> = withContext(Dispatchers.IO) {
         if (!ApiConfig.isConfigured) return@withContext emptyList()
         try {
@@ -159,9 +127,7 @@ object ApiClient {
             val body = readBody(c)
             c.disconnect()
             parseOrders(JSONArray(body))
-        } catch (_: Exception) {
-            emptyList()
-        }
+        } catch (_: Exception) { emptyList() }
     }
 
     suspend fun fetchNewOrders(since: Long): List<Order> = withContext(Dispatchers.IO) {
@@ -170,79 +136,65 @@ object ApiClient {
             val c = conn("/api/orders/new-count?since=$since", "GET")
             val body = readBody(c)
             c.disconnect()
-            val obj = JSONObject(body)
-            parseOrders(obj.optJSONArray("orders") ?: JSONArray())
-        } catch (_: Exception) {
-            emptyList()
-        }
+            parseOrders(JSONObject(body).optJSONArray("orders") ?: JSONArray())
+        } catch (_: Exception) { emptyList() }
     }
 
     suspend fun updateOrderStatus(
-        orderId: String,
-        status: String,
-        byKitchen: Boolean = false,
-        byCustomer: Boolean = false
+        orderId: String, status: String,
+        byKitchen: Boolean = false, byCustomer: Boolean = false
     ): Order? = withContext(Dispatchers.IO) {
         if (!ApiConfig.isConfigured) return@withContext null
         try {
             val c = conn("/api/orders/$orderId/status", "PATCH", admin = byKitchen)
-            writeJson(
-                c,
-                JSONObject()
-                    .put("status", status)
-                    .put("byKitchen", byKitchen)
-                    .put("byCustomer", byCustomer)
-            )
+            writeJson(c, JSONObject().put("status", status)
+                .put("byKitchen", byKitchen).put("byCustomer", byCustomer))
             val body = readBody(c)
             val code = c.responseCode
             c.disconnect()
             if (code !in 200..299) return@withContext null
             parseOrder(JSONObject(body))
-        } catch (_: Exception) {
-            null
-        }
+        } catch (_: Exception) { null }
     }
 
     suspend fun createOrder(
-        customerId: String,
-        items: List<OrderItem>,
-        paidNow: Long = 0,
-        note: String = "",
-        source: String = "kitchen"
+        customerId: String, items: List<OrderItem>,
+        paidNow: Long = 0, note: String = "", source: String = "kitchen"
     ): Order? = withContext(Dispatchers.IO) {
         if (!ApiConfig.isConfigured) return@withContext null
         try {
             val arr = JSONArray()
-            items.forEach { it ->
-                arr.put(
-                    JSONObject()
-                        .put("foodId", it.foodId)
-                        .put("foodName", it.foodName)
-                        .put("unitPrice", it.unitPrice)
-                        .put("quantity", it.quantity)
-                )
+            items.forEach {
+                arr.put(JSONObject().put("foodId", it.foodId).put("foodName", it.foodName)
+                    .put("unitPrice", it.unitPrice).put("quantity", it.quantity))
             }
             val c = conn("/api/orders", "POST")
-            writeJson(
-                c,
-                JSONObject()
-                    .put("customerId", customerId)
-                    .put("items", arr)
-                    .put("paidNow", paidNow)
-                    .put("note", note)
-                    .put("source", source)
-            )
+            writeJson(c, JSONObject().put("customerId", customerId).put("items", arr)
+                .put("paidNow", paidNow).put("note", note).put("source", source))
             val body = readBody(c)
             val code = c.responseCode
             c.disconnect()
             if (code !in 200..299) return@withContext null
             parseOrder(JSONObject(body).getJSONObject("order"))
-        } catch (_: Exception) {
-            null
-        }
+        } catch (_: Exception) { null }
     }
 
-    // ---------- Customers ----------
+    /** ثبت دریافت وجه — حسابداری آنلاین */
+    suspend fun recordPayment(customerId: String, amount: Long, note: String = ""): Boolean =
+        withContext(Dispatchers.IO) {
+            if (!ApiConfig.isConfigured || amount <= 0) return@withContext false
+            try {
+                val c = conn("/api/payments", "POST", admin = true)
+                writeJson(c, JSONObject()
+                    .put("customerId", customerId)
+                    .put("amount", amount)
+                    .put("note", note.ifBlank { "دریافت از آشپزخانه" }))
+                val ok = c.responseCode in 200..299
+                c.disconnect()
+                ok
+            } catch (_: Exception) { false }
+        }
+
     suspend fun fetchCustomerByCode(code: String): Customer? = withContext(Dispatchers.IO) {
         if (!ApiConfig.isConfigured) return@withContext null
         try {
@@ -253,9 +205,7 @@ object ApiClient {
             c.disconnect()
             if (codeResp != 200) return@withContext null
             parseCustomer(JSONObject(body))
-        } catch (_: Exception) {
-            null
-        }
+        } catch (_: Exception) { null }
     }
 
     suspend fun fetchCustomers(): List<Customer> = withContext(Dispatchers.IO) {
@@ -266,55 +216,33 @@ object ApiClient {
             c.disconnect()
             val arr = JSONArray(body)
             (0 until arr.length()).map { parseCustomer(arr.getJSONObject(it)) }
-        } catch (_: Exception) {
-            emptyList()
-        }
+        } catch (_: Exception) { emptyList() }
     }
 
     suspend fun createCustomer(customer: Customer): Customer? = withContext(Dispatchers.IO) {
         if (!ApiConfig.isConfigured) return@withContext null
         try {
-            val addr = JSONObject()
-                .put("street", customer.address.street)
+            val addr = JSONObject().put("street", customer.address.street)
                 .put("city", customer.address.city)
                 .put("postalCode", customer.address.postalCode)
                 .put("notes", customer.address.notes)
             val c = conn("/api/customers", "POST", admin = true)
-            writeJson(
-                c,
-                JSONObject()
-                    .put("name", customer.name)
-                    .put("phone", customer.phone)
-                    .put("subscriptionCode", customer.subscriptionCode)
-                    .put("address", addr)
-                    .put("debt", customer.debt)
-                    .put("credit", customer.credit)
-            )
+            writeJson(c, JSONObject().put("name", customer.name).put("phone", customer.phone)
+                .put("subscriptionCode", customer.subscriptionCode).put("address", addr)
+                .put("debt", customer.debt).put("credit", customer.credit))
             val body = readBody(c)
             val code = c.responseCode
             c.disconnect()
             if (code !in 200..299) return@withContext null
             parseCustomer(JSONObject(body))
-        } catch (_: Exception) {
-            null
-        }
+        } catch (_: Exception) { null }
     }
 
-    // ---------- Ratings ----------
     data class DeliveryRating(
-        val id: String,
-        val orderId: String,
-        val customerName: String,
-        val rating: Int,
-        val comment: String,
-        val createdAt: Long
+        val id: String, val orderId: String, val customerName: String,
+        val rating: Int, val comment: String, val createdAt: Long
     )
-
-    data class RatingsResult(
-        val ratings: List<DeliveryRating>,
-        val average: Double,
-        val count: Int
-    )
+    data class RatingsResult(val ratings: List<DeliveryRating>, val average: Double, val count: Int)
 
     suspend fun fetchRatings(): RatingsResult = withContext(Dispatchers.IO) {
         if (!ApiConfig.isConfigured) return@withContext RatingsResult(emptyList(), 0.0, 0)
@@ -326,23 +254,12 @@ object ApiClient {
             val arr = obj.optJSONArray("ratings") ?: JSONArray()
             val list = (0 until arr.length()).map { i ->
                 val o = arr.getJSONObject(i)
-                DeliveryRating(
-                    id = o.optString("id"),
-                    orderId = o.optString("orderId"),
-                    customerName = o.optString("customerName"),
-                    rating = o.optInt("rating"),
-                    comment = o.optString("comment", ""),
-                    createdAt = o.optLong("createdAt")
-                )
+                DeliveryRating(o.optString("id"), o.optString("orderId"),
+                    o.optString("customerName"), o.optInt("rating"),
+                    o.optString("comment", ""), o.optLong("createdAt"))
             }
-            RatingsResult(
-                ratings = list,
-                average = obj.optDouble("average", 0.0),
-                count = obj.optInt("count", list.size)
-            )
-        } catch (_: Exception) {
-            RatingsResult(emptyList(), 0.0, 0)
-        }
+            RatingsResult(list, obj.optDouble("average", 0.0), obj.optInt("count", list.size))
+        } catch (_: Exception) { RatingsResult(emptyList(), 0.0, 0) }
     }
 
     private fun parseOrders(arr: JSONArray): List<Order> =
@@ -352,12 +269,8 @@ object ApiClient {
         val itemsArr = o.optJSONArray("items") ?: JSONArray()
         val items = (0 until itemsArr.length()).map { i ->
             val it = itemsArr.getJSONObject(i)
-            OrderItem(
-                foodId = it.optString("foodId"),
-                foodName = it.optString("foodName"),
-                unitPrice = it.optLong("unitPrice"),
-                quantity = it.optInt("quantity", 1)
-            )
+            OrderItem(it.optString("foodId"), it.optString("foodName"),
+                it.optLong("unitPrice"), it.optInt("quantity", 1))
         }
         return Order(
             id = o.optString("id"),
