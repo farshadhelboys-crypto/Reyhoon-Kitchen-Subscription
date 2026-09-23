@@ -16,6 +16,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.reyhoon.kitchen.data.ApiClient
 import com.reyhoon.kitchen.data.ApiConfig
 import com.reyhoon.kitchen.data.AppRepository
@@ -58,7 +59,7 @@ fun AdminMenuScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                 title = {
                     Column {
                         Text("مدیریت منو", fontWeight = FontWeight.Bold)
-                        Text("دسته‌ها: چلو، خورشت، نوشیدنی، مخلفات...", style = MaterialTheme.typography.bodySmall)
+                        Text("دسته‌ها با آیکن: چلو 🍚 خورشت 🍲 نوشیدنی 🥤", style = MaterialTheme.typography.bodySmall)
                     }
                 },
                 navigationIcon = {
@@ -104,8 +105,13 @@ fun AdminMenuScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                 ) {
                     grouped.forEach { (cat, list) ->
                         item {
-                            Text(cat, fontWeight = FontWeight.Bold, color = GreenPrimary,
-                                modifier = Modifier.padding(vertical = 4.dp))
+                            Text(
+                                MenuCategories.label(cat),
+                                fontWeight = FontWeight.Bold,
+                                color = GreenPrimary,
+                                fontSize = 18.sp,
+                                modifier = Modifier.padding(vertical = 6.dp)
+                            )
                         }
                         items(list, key = { it.id }) { item ->
                             Card(shape = RoundedCornerShape(12.dp)) {
@@ -113,6 +119,8 @@ fun AdminMenuScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                                     modifier = Modifier.padding(14.dp).fillMaxWidth(),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
+                                    Text(MenuCategories.emoji(item.category), fontSize = 28.sp)
+                                    Spacer(modifier = Modifier.width(12.dp))
                                     Column(modifier = Modifier.weight(1f)) {
                                         Text(item.name, fontWeight = FontWeight.SemiBold)
                                         Text(
@@ -154,7 +162,7 @@ fun AdminMenuScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                         food
                     }
                     if (result != null) {
-                        message = "ذخیره شد — مشتری دسته‌بندی را می‌بیند"
+                        message = "ذخیره شد — ${MenuCategories.label(food.category)}"
                         showDialog = false
                         refresh()
                     } else message = "خطا در ذخیره"
@@ -191,7 +199,7 @@ private fun FoodEditDialog(
                 )
                 ExposedDropdownMenuBox(expanded = catExpanded, onExpandedChange = { catExpanded = it }) {
                     OutlinedTextField(
-                        value = category,
+                        value = MenuCategories.label(category),
                         onValueChange = {},
                         readOnly = true,
                         label = { Text("دسته") },
@@ -201,7 +209,7 @@ private fun FoodEditDialog(
                     ExposedDropdownMenu(expanded = catExpanded, onDismissRequest = { catExpanded = false }) {
                         MenuCategories.ALL.forEach { cat ->
                             DropdownMenuItem(
-                                text = { Text(cat) },
+                                text = { Text(MenuCategories.label(cat)) },
                                 onClick = { category = cat; catExpanded = false }
                             )
                         }
