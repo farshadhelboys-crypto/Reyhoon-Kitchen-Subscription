@@ -5,17 +5,50 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.lightColorScheme
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -44,7 +77,7 @@ class MainActivity : ComponentActivity() {
                     onSurface = Color(0xFF0A0A0A)
                 )
             ) {
-                Surface(Modifier.fillMaxSize()) {
+                Surface(modifier = Modifier.fillMaxSize()) {
                     CustomerApp()
                 }
             }
@@ -70,13 +103,16 @@ fun LoginScreen(onLogin: (Customer) -> Unit) {
     val scope = rememberCoroutineScope()
 
     Column(
-        Modifier.fillMaxSize().background(Color(0xFFF1F8E9)).padding(28.dp),
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0xFFF1F8E9))
+            .padding(28.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        Text("🌿 ریحون", fontSize = 32.sp, fontWeight = FontWeight.Bold, color = Color(0xFF2E7D32))
+        Text("ریحان", fontSize = 32.sp, fontWeight = FontWeight.Bold, color = Color(0xFF2E7D32))
         Text("اپ مشتریان", fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
-        Spacer(Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(8.dp))
         if (!ApiConfig.isConfigured) {
             Text(
                 "آدرس سرور تنظیم نشده. در ApiConfig.kt مقدار baseUrl را بگذارید.",
@@ -84,7 +120,7 @@ fun LoginScreen(onLogin: (Customer) -> Unit) {
                 fontWeight = FontWeight.Bold
             )
         }
-        Spacer(Modifier.height(24.dp))
+        Spacer(modifier = Modifier.height(24.dp))
         OutlinedTextField(
             value = code,
             onValueChange = { code = it.uppercase().trim(); error = null },
@@ -94,7 +130,7 @@ fun LoginScreen(onLogin: (Customer) -> Unit) {
             isError = error != null,
             supportingText = { error?.let { Text(it, color = Color(0xFFC62828)) } }
         )
-        Spacer(Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(16.dp))
         Button(
             onClick = {
                 scope.launch {
@@ -105,10 +141,15 @@ fun LoginScreen(onLogin: (Customer) -> Unit) {
                 }
             },
             enabled = code.isNotBlank() && !loading && ApiConfig.isConfigured,
-            modifier = Modifier.fillMaxWidth().height(52.dp)
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(52.dp)
         ) {
-            if (loading) CircularProgressIndicator(Modifier.size(22.dp), color = Color.White, strokeWidth = 2.dp)
-            else Text("ورود", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+            if (loading) {
+                CircularProgressIndicator(modifier = Modifier.size(22.dp), color = Color.White, strokeWidth = 2.dp)
+            } else {
+                Text("ورود", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+            }
         }
     }
 }
@@ -117,7 +158,7 @@ fun LoginScreen(onLogin: (Customer) -> Unit) {
 @Composable
 fun MainTabs(customer: Customer, onLogout: () -> Unit) {
     var tab by remember { mutableIntStateOf(0) }
-    var freshCustomer by remember { mutableStateOf(customer) }
+    val freshCustomer = customer
 
     Scaffold(
         topBar = {
@@ -125,25 +166,44 @@ fun MainTabs(customer: Customer, onLogout: () -> Unit) {
                 title = {
                     Column {
                         Text("سلام ${freshCustomer.name}", fontWeight = FontWeight.Bold)
-                        Text("بدهی: ${fmt(freshCustomer.debt)} | اعتبار: ${fmt(freshCustomer.credit)}", style = MaterialTheme.typography.bodySmall)
+                        Text(
+                            "بدهی: ${fmt(freshCustomer.debt)} | اعتبار: ${fmt(freshCustomer.credit)}",
+                            style = MaterialTheme.typography.bodySmall
+                        )
                     }
                 },
                 actions = {
-                    IconButton(onClick = onLogout) { Icon(Icons.AutoMirrored.Filled.Logout, null) }
+                    IconButton(onClick = onLogout) {
+                        Icon(Icons.AutoMirrored.Filled.Logout, null)
+                    }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color(0xFF2E7D32), titleContentColor = Color.White, actionIconContentColor = Color.White)
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = Color(0xFF2E7D32),
+                    titleContentColor = Color.White,
+                    actionIconContentColor = Color.White
+                )
             )
         },
         bottomBar = {
             NavigationBar {
-                NavigationBarItem(selected = tab == 0, onClick = { tab = 0 }, icon = { Text("🍽") }, label = { Text("منو") })
-                NavigationBarItem(selected = tab == 1, onClick = { tab = 1 }, icon = { Text("📦") }, label = { Text("سفارش‌ها") })
+                NavigationBarItem(
+                    selected = tab == 0,
+                    onClick = { tab = 0 },
+                    icon = { Text("منو") },
+                    label = { Text("منو و سفارش") }
+                )
+                NavigationBarItem(
+                    selected = tab == 1,
+                    onClick = { tab = 1 },
+                    icon = { Text("سفارش") },
+                    label = { Text("وضعیت سفارش") }
+                )
             }
         }
     ) { padding ->
-        Box(Modifier.padding(padding)) {
+        Box(modifier = Modifier.padding(padding)) {
             when (tab) {
-                0 -> MenuOrderTab(freshCustomer) { /* after order refresh from server via login */ }
+                0 -> MenuOrderTab(freshCustomer)
                 1 -> OrdersTab(freshCustomer)
             }
         }
@@ -151,7 +211,7 @@ fun MainTabs(customer: Customer, onLogout: () -> Unit) {
 }
 
 @Composable
-fun MenuOrderTab(customer: Customer, onOrdered: () -> Unit) {
+fun MenuOrderTab(customer: Customer) {
     var menu by remember { mutableStateOf<List<FoodItem>>(emptyList()) }
     var qty by remember { mutableStateOf<Map<String, Int>>(emptyMap()) }
     var msg by remember { mutableStateOf<String?>(null) }
@@ -165,26 +225,48 @@ fun MenuOrderTab(customer: Customer, onOrdered: () -> Unit) {
     }
     val total = cart.sumOf { it.unitPrice * it.quantity }
 
-    Column(Modifier.fillMaxSize().padding(12.dp)) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(12.dp)
+    ) {
         Text("آدرس: ${customer.address.full()}", fontWeight = FontWeight.SemiBold)
         if (customer.credit > 0) {
-            Text("اعتبار شما ${fmt(customer.credit)} تومان از سفارش کسر می‌شود", color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold)
+            Text(
+                "اعتبار شما ${fmt(customer.credit)} تومان از سفارش کسر می‌شود",
+                color = Color(0xFF2E7D32),
+                fontWeight = FontWeight.Bold
+            )
         }
-        Spacer(Modifier.height(8.dp))
-        LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Spacer(modifier = Modifier.height(8.dp))
+        LazyColumn(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
             items(menu, key = { it.id }) { f ->
                 Card(shape = RoundedCornerShape(12.dp)) {
-                    Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Column(Modifier.weight(1f)) {
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
                             Text(f.name, fontWeight = FontWeight.Bold)
-                            Text("${fmt(f.price)} تومان", color = Color(0xFFE65100), fontWeight = FontWeight.Bold)
+                            Text(
+                                "${fmt(f.price)} تومان",
+                                color = Color(0xFFE65100),
+                                fontWeight = FontWeight.Bold
+                            )
                         }
                         IconButton(onClick = {
-                            qty = qty.toMutableMap().apply { put(f.id, ((qty[f.id] ?: 0) - 1).coerceAtLeast(0)) }
+                            qty = qty.toMutableMap().apply {
+                                put(f.id, ((qty[f.id] ?: 0) - 1).coerceAtLeast(0))
+                            }
                         }) { Icon(Icons.Default.Remove, null) }
                         Text("${qty[f.id] ?: 0}", fontWeight = FontWeight.Bold)
                         IconButton(onClick = {
-                            qty = qty.toMutableMap().apply { put(f.id, (qty[f.id] ?: 0) + 1) }
+                            qty = qty.toMutableMap().apply {
+                                put(f.id, (qty[f.id] ?: 0) + 1)
+                            }
                         }) { Icon(Icons.Default.Add, null) }
                     }
                 }
@@ -196,14 +278,20 @@ fun MenuOrderTab(customer: Customer, onOrdered: () -> Unit) {
                 onClick = {
                     scope.launch {
                         val ok = ApiClient.placeOrder(customer.id, cart)
-                        msg = if (ok) "سفارش ثبت شد ✓" else "خطا در ثبت سفارش"
-                        if (ok) { qty = emptyMap(); onOrdered() }
+                        msg = if (ok) "سفارش ثبت شد" else "خطا در ثبت سفارش"
+                        if (ok) qty = emptyMap()
                     }
                 },
-                modifier = Modifier.fillMaxWidth().height(50.dp)
-            ) { Text("ثبت سفارش", fontWeight = FontWeight.Bold) }
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(50.dp)
+            ) {
+                Text("ثبت سفارش", fontWeight = FontWeight.Bold)
+            }
         }
-        msg?.let { Text(it, fontWeight = FontWeight.Bold, color = Color(0xFF2E7D32)) }
+        msg?.let {
+            Text(it, fontWeight = FontWeight.Bold, color = Color(0xFF2E7D32))
+        }
     }
 }
 
@@ -219,11 +307,14 @@ fun OrdersTab(customer: Customer) {
         }
     }
 
-    fun ts(t: Long?) =
+    fun ts(t: Long?): String =
         if (t == null || t <= 0) "—"
         else SimpleDateFormat("yyyy/MM/dd HH:mm", Locale("fa")).format(Date(t))
 
-    LazyColumn(contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    LazyColumn(
+        contentPadding = PaddingValues(12.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
         item {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("سفارش‌های من", fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
@@ -234,14 +325,18 @@ fun OrdersTab(customer: Customer) {
         }
         items(orders, key = { it.id }) { o ->
             Card(shape = RoundedCornerShape(12.dp)) {
-                Column(Modifier.padding(14.dp)) {
+                Column(modifier = Modifier.padding(14.dp)) {
                     Text(o.statusFa, fontWeight = FontWeight.Bold, color = Color(0xFF2E7D32))
                     Text("ثبت: ${ts(o.createdAt)}")
                     if (o.deliveredAt != null) Text("تحویل: ${ts(o.deliveredAt)}")
                     o.items.forEach { Text("• ${it.foodName} × ${it.quantity}") }
-                    Text("${fmt(o.totalAmount)} تومان", fontWeight = FontWeight.Bold, color = Color(0xFFE65100))
-                    if (o.status != "delivered" && (o.status == "shipped" || o.status == "preparing" || o.status == "registered")) {
-                        Spacer(Modifier.height(8.dp))
+                    Text(
+                        "${fmt(o.totalAmount)} تومان",
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFFE65100)
+                    )
+                    if (o.status != "delivered") {
+                        Spacer(modifier = Modifier.height(8.dp))
                         Button(
                             onClick = {
                                 scope.launch {
@@ -251,7 +346,9 @@ fun OrdersTab(customer: Customer) {
                                 }
                             },
                             modifier = Modifier.fillMaxWidth()
-                        ) { Text("تحویل گرفتم", fontWeight = FontWeight.Bold) }
+                        ) {
+                            Text("تحویل گرفتم", fontWeight = FontWeight.Bold)
+                        }
                     }
                 }
             }
