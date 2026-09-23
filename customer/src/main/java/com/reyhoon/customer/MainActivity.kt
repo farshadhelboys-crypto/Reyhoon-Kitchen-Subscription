@@ -20,7 +20,7 @@ import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.modifier.modifier
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -85,7 +85,7 @@ fun NewCodeDialog(code: String, onDismiss: () -> Unit) {
         text = {
             Column {
                 Text("کد اشتراک خود را یادداشت کنید:")
-                Spacer(Modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(12.dp))
                 Text(
                     code,
                     fontSize = 28.sp,
@@ -109,7 +109,7 @@ fun WelcomeScreen(
     onLoggedIn: (Customer) -> Unit,
     onRegistered: (Customer) -> Unit
 ) {
-    var mode by remember { mutableStateOf<String?>(null) } // null | existing | new
+    var mode by remember { mutableStateOf<String?>(null) }
 
     Column(
         modifier = Modifier
@@ -158,8 +158,8 @@ fun ExistingLogin(onLoggedIn: (Customer) -> Unit, onBack: () -> Unit) {
     Spacer(modifier = Modifier.height(12.dp))
     OutlinedTextField(
         value = code,
-        onValueChange = { code = it.uppercase().trim(); error = null },
-        label = { Text("کد اشتراک") },
+        onValueChange = { code = it.filter { ch -> ch.isDigit() }; error = null },
+        label = { Text("کد اشتراک (فقط عدد)") },
         singleLine = true,
         modifier = Modifier.fillMaxWidth()
     )
@@ -177,7 +177,7 @@ fun ExistingLogin(onLoggedIn: (Customer) -> Unit, onBack: () -> Unit) {
         enabled = code.isNotBlank() && !loading,
         modifier = Modifier.fillMaxWidth().height(50.dp)
     ) {
-        if (loading) CircularProgressIndicator(Modifier.size(22.dp), color = Color.White, strokeWidth = 2.dp)
+        if (loading) CircularProgressIndicator(Modifier = Modifier.size(22.dp), color = Color.White, strokeWidth = 2.dp)
         else Text("ورود", fontWeight = FontWeight.Bold)
     }
     TextButton(onClick = onBack) { Text("بازگشت") }
@@ -201,7 +201,7 @@ fun NewRegister(onRegistered: (Customer) -> Unit, onBack: () -> Unit) {
     OutlinedTextField(value = street, onValueChange = { street = it }, label = { Text("آدرس کامل") }, singleLine = true, modifier = Modifier.fillMaxWidth())
     OutlinedTextField(value = city, onValueChange = { city = it }, label = { Text("شهر") }, singleLine = true, modifier = Modifier.fillMaxWidth())
     error?.let { Text(it, color = Color(0xFFC62828), fontWeight = FontWeight.Bold) }
-    Spacer(Modifier = Modifier.height(12.dp))
+    Spacer(modifier = Modifier.height(12.dp))
     Button(
         onClick = {
             scope.launch {
@@ -214,7 +214,7 @@ fun NewRegister(onRegistered: (Customer) -> Unit, onBack: () -> Unit) {
         enabled = name.isNotBlank() && phone.length >= 10 && !loading,
         modifier = Modifier.fillMaxWidth().height(50.dp)
     ) {
-        if (loading) CircularProgressIndicator(Modifier.size(22.dp), color = Color.White, strokeWidth = 2.dp)
+        if (loading) CircularProgressIndicator(modifier = Modifier.size(22.dp), color = Color.White, strokeWidth = 2.dp)
         else Text("ثبت و ورود", fontWeight = FontWeight.Bold)
     }
     TextButton(onClick = onBack) { Text("بازگشت") }
