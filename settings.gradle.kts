@@ -15,3 +15,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "ReyhoonKitchen"
 include(":app")
+include(":customer")
