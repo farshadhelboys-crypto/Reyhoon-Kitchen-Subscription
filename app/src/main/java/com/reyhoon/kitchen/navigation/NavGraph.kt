@@ -17,6 +17,7 @@ object Routes {
     const val ADMIN_MENU = "admin_menu"
     const val ADMIN_CUSTOMERS = "admin_customers"
     const val NEW_ORDER = "new_order"
+    const val KITCHEN_ORDERS = "kitchen_orders"
 }
 
 @Composable
@@ -69,6 +70,7 @@ fun ReyhoonNavGraph(modifier: Modifier = Modifier) {
                 onNavigateToMenuManage = { navController.navigate(Routes.ADMIN_MENU) },
                 onNavigateToCustomers = { navController.navigate(Routes.ADMIN_CUSTOMERS) },
                 onNavigateToNewOrder = { navController.navigate(Routes.NEW_ORDER) },
+                onNavigateToOrders = { navController.navigate(Routes.KITCHEN_ORDERS) },
                 onLogout = {
                     AppRepository.isAdmin.value = false
                     navController.navigate(Routes.ENTER) {
@@ -88,6 +90,10 @@ fun ReyhoonNavGraph(modifier: Modifier = Modifier) {
 
         composable(Routes.NEW_ORDER) {
             NewOrderScreen(onBack = { navController.popBackStack() })
+        }
+
+        composable(Routes.KITCHEN_ORDERS) {
+            KitchenOrdersScreen(onBack = { navController.popBackStack() })
         }
     }
 }
