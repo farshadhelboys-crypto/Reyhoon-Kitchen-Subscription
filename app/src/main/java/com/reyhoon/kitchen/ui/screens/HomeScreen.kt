@@ -92,12 +92,12 @@ fun HomeScreen(
                     Spacer(modifier = Modifier.width(14.dp))
                     Column {
                         Text(
-                            text = "سلام ${customer!!.name} عزیز 👋",
+                            text = "مشتری: ${customer!!.name}",
                             style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.Bold
                         )
                         Text(
-                            text = "به آشپزخانه ریحون خوش آمدید",
+                            text = "کد اشتراک: ${customer!!.subscriptionCode ?: "—"}",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
                         )
@@ -105,7 +105,6 @@ fun HomeScreen(
                 }
             }
 
-            // Balance cards
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -120,7 +119,7 @@ fun HomeScreen(
                     )
                 ) {
                     Column(modifier = Modifier.padding(14.dp)) {
-                        Text("بدهی شما", style = MaterialTheme.typography.labelMedium)
+                        Text("بدهی", style = MaterialTheme.typography.labelMedium)
                         Text(
                             if (customer!!.debt > 0)
                                 "${AppRepository.formatPrice(customer!!.debt)} ت"
@@ -136,7 +135,7 @@ fun HomeScreen(
                     colors = CardDefaults.cardColors(containerColor = GreenPale)
                 ) {
                     Column(modifier = Modifier.padding(14.dp)) {
-                        Text("اعتبار شما", style = MaterialTheme.typography.labelMedium)
+                        Text("اعتبار", style = MaterialTheme.typography.labelMedium)
                         Text(
                             if (customer!!.credit > 0)
                                 "${AppRepository.formatPrice(customer!!.credit)} ت"
@@ -145,21 +144,6 @@ fun HomeScreen(
                             color = GreenMid
                         )
                     }
-                }
-            }
-
-            if (customer!!.credit > 0) {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(14.dp),
-                    colors = CardDefaults.cardColors(containerColor = GreenMid.copy(alpha = 0.1f))
-                ) {
-                    Text(
-                        "در سفارش بعدی، مبلغ ${AppRepository.formatPrice(customer!!.credit)} تومان بابت اعتبار شما از قیمت غذا کسر خواهد شد.",
-                        modifier = Modifier.padding(14.dp),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = GreenMid
-                    )
                 }
             }
 
@@ -188,12 +172,12 @@ fun HomeScreen(
 
             Button(
                 onClick = onNavigateToMenu,
-                modifier = Modifier.fillMaxWidth().height(54.dp),
+                modifier = Modifier.fillMaxWidth().height(56.dp),
                 shape = RoundedCornerShape(14.dp)
             ) {
-                Icon(Icons.Default.RestaurantMenu, null)
+                Icon(Icons.Default.AddShoppingCart, null)
                 Spacer(modifier = Modifier.width(8.dp))
-                Text("مشاهده منوی غذا", fontWeight = FontWeight.Medium)
+                Text("ثبت سفارش جدید برای این مشتری", fontWeight = FontWeight.Bold)
             }
 
             OutlinedButton(
