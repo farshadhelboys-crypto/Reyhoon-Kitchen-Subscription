@@ -47,7 +47,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier.modifier
+import androidx.compose.ui.Modifier.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -130,12 +130,12 @@ fun KitchenOrdersScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                 },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "بازگشت")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "بازگشت")
                     }
                 },
                 actions = {
                     IconButton(onClick = { scope.launch { refresh() } }) {
-                        Icon(Icons.Default.Refresh, "بروزرسانی")
+                        Icon(Icons.Filled.Refresh, contentDescription = "بروزرسانی")
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -155,7 +155,7 @@ fun KitchenOrdersScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                     modifier = Modifier.fillMaxWidth().padding(12.dp)
                 ) {
                     Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.NotificationsActive, null, tint = OrangeSecondary)
+                        Icon(Icons.Filled.NotificationsActive, contentDescription = null, tint = OrangeSecondary)
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(msg, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
                         TextButton(onClick = { alertText = null }) { Text("باشه") }
