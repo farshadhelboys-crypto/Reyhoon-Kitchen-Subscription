@@ -15,4 +15,5 @@ dependencyResolutionManagement {
 
 rootProject.name = "ReyhoonKitchen"
 include(":app")
+// customer module: include after kitchen is green
 include(":customer")

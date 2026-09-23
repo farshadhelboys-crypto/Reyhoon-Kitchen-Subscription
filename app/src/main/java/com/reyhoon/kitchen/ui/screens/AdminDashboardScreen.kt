@@ -32,9 +32,9 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier.modifier
@@ -79,7 +79,7 @@ fun AdminDashboardScreen(
                 },
                 actions = {
                     IconButton(onClick = onLogout) {
-                        Icon(Icons.AutoMirrored.Filled.Logout, "خروج")
+                        Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = "خروج")
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -109,7 +109,7 @@ fun AdminDashboardScreen(
                 shape = RoundedCornerShape(12.dp)
             ) {
                 Text(
-                    if (ApiConfig.isConfigured)
+                    text = if (ApiConfig.isConfigured)
                         "آنلاین: ${ApiConfig.baseUrl}"
                     else
                         "آدرس Worker خالی است — فایل ApiConfig.kt را پر کنید تا سفارش آنلاین و آلارم فعال شود.",
@@ -149,16 +149,22 @@ fun AdminDashboardScreen(
             Spacer(modifier = Modifier.height(8.dp))
             Text("عملیات سریع", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
 
-            AdminActionButton(Icons.Default.NotificationsActive, "سفارش‌های آنلاین + آلارم", "وضعیت: ثبت / آماده‌سازی / ارسال / تحویل", onNavigateToOrders)
-            AdminActionButton(Icons.Default.AddShoppingCart, "ثبت سفارش جدید", "سفارش دستی در آشپزخانه", onNavigateToNewOrder)
-            AdminActionButton(Icons.Default.RestaurantMenu, "مدیریت منوی محلی", "همگام با پنل HTML سرور", onNavigateToMenuManage)
-            AdminActionButton(Icons.Default.People, "مشتریان و بدهی", "افزودن مشتری و تسویه", onNavigateToCustomers)
+            AdminActionButton(Icons.Filled.NotificationsActive, "سفارش‌های آنلاین + آلارم", "وضعیت: ثبت / آماده‌سازی / ارسال / تحویل", onNavigateToOrders)
+            AdminActionButton(Icons.Filled.AddShoppingCart, "ثبت سفارش جدید", "سفارش دستی در آشپزخانه", onNavigateToNewOrder)
+            AdminActionButton(Icons.Filled.RestaurantMenu, "مدیریت منوی محلی", "همگام با پنل HTML سرور", onNavigateToMenuManage)
+            AdminActionButton(Icons.Filled.People, "مشتریان و بدهی", "افزودن مشتری و تسویه", onNavigateToCustomers)
         }
     }
 }
 
 @Composable
-private fun StatCard(title: String, value: String, subtitle: String, modifier: Modifier = Modifier, color: Color) {
+private fun StatCard(
+    title: String,
+    value: String,
+    subtitle: String,
+    modifier: Modifier = Modifier,
+    color: Color
+) {
     Card(
         modifier = modifier,
         shape = RoundedCornerShape(16.dp),
@@ -174,16 +180,28 @@ private fun StatCard(title: String, value: String, subtitle: String, modifier: M
 }
 
 @Composable
-private fun AdminActionButton(icon: ImageVector, title: String, subtitle: String, onClick: () -> Unit) {
-    Card(onClick = onClick, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp)) {
-        Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(icon, null, tint = GreenMid, modifier = Modifier.size(28.dp))
+private fun AdminActionButton(
+    icon: ImageVector,
+    title: String,
+    subtitle: String,
+    onClick: () -> Unit
+) {
+    Card(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(14.dp)
+    ) {
+        Row(
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(icon, contentDescription = null, tint = GreenMid, modifier = Modifier.size(28.dp))
             Spacer(modifier = Modifier.width(14.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(title, fontWeight = FontWeight.SemiBold)
                 Text(subtitle, style = MaterialTheme.typography.bodySmall)
             }
-            Icon(Icons.Default.ChevronLeft, null)
+            Icon(Icons.Filled.ChevronLeft, contentDescription = null)
         }
     }
 }
