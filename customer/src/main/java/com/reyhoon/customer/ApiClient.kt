@@ -22,7 +22,7 @@ data class Customer(
 data class OrderItem(val foodId: String, val foodName: String, val unitPrice: Long, val quantity: Int)
 data class Order(
     val id: String, val items: List<OrderItem>, val totalAmount: Long, val paidAmount: Long,
-    val status: String, val createdAt: Long, val deliveredAt: Long?
+    val status: String, val createdAt: Long, val deliveredAt: Long?, val rated: Boolean
 ) {
     val statusFa: String get() = when (status) {
         "registered" -> "سفارش ثبت شد"
@@ -51,6 +51,33 @@ object ApiClient {
         return BufferedReader(InputStreamReader(s ?: return "", Charsets.UTF_8)).use { it.readText() }
     }
 
+    private fun write(c: HttpURLConnection, body: JSONObject) {
+        c.doOutput = true
+        c.setRequestProperty("Content-Type", "application/json; charset=utf-8")
+        OutputStreamWriter(c.outputStream, Charsets.UTF_8).use { it.write(body.toString()) }
+    }
+
+    /** مشتری جدید — کد اشتراک خودکار */
+    suspend fun register(name: String, phone: String, street: String, city: String): Customer? =
+        withContext(Dispatchers.IO) {
+            if (!ApiConfig.isConfigured) return@withContext null
+            try {
+                val c = conn("/api/customers/register", "POST")
+                write(
+                    c,
+                    JSONObject()
+                        .put("name", name)
+                        .put("phone", phone)
+                        .put("address", JSONObject().put("street", street).put("city", city))
+                )
+                val body = read(c)
+                val ok = c.responseCode in 200..299
+                c.disconnect()
+                if (!ok) return@withContext null
+                parseCustomer(JSONObject(body).getJSONObject("customer"))
+            } catch (_: Exception) { null }
+        }
+
     suspend fun login(code: String): Customer? = withContext(Dispatchers.IO) {
         if (!ApiConfig.isConfigured) return@withContext null
         try {
@@ -60,17 +87,7 @@ object ApiClient {
             val ok = c.responseCode == 200
             c.disconnect()
             if (!ok) return@withContext null
-            val o = JSONObject(body)
-            val a = o.optJSONObject("address")
-            Customer(
-                id = o.optString("id"),
-                name = o.optString("name"),
-                phone = o.optString("phone"),
-                subscriptionCode = o.optString("subscriptionCode").ifBlank { null },
-                debt = o.optLong("debt"),
-                credit = o.optLong("credit"),
-                address = Address(a?.optString("street") ?: "", a?.optString("city") ?: "")
-            )
+            parseCustomer(JSONObject(body))
         } catch (_: Exception) { null }
     }
 
@@ -81,9 +98,13 @@ object ApiClient {
             val body = read(c)
             c.disconnect()
             val arr = JSONArray(body)
-            (0 until arr.length()).map {
+            (0 until arr.length()).mapNotNull {
                 val o = arr.getJSONObject(it)
-                FoodItem(o.optString("id"), o.optString("name"), o.optString("description"), o.optLong("price"), o.optString("category", "عمومی"))
+                if (o.optString("name") == "__ping__") null
+                else FoodItem(
+                    o.optString("id"), o.optString("name"), o.optString("description"),
+                    o.optLong("price"), o.optString("category", "عمومی")
+                )
             }
         } catch (_: Exception) { emptyList() }
     }
@@ -95,57 +116,99 @@ object ApiClient {
             val body = read(c)
             c.disconnect()
             val arr = JSONArray(body)
-            (0 until arr.length()).map { i ->
-                val o = arr.getJSONObject(i)
-                val itemsArr = o.optJSONArray("items") ?: JSONArray()
-                val items = (0 until itemsArr.length()).map { j ->
-                    val it = itemsArr.getJSONObject(j)
-                    OrderItem(it.optString("foodId"), it.optString("foodName"), it.optLong("unitPrice"), it.optInt("quantity", 1))
-                }
-                Order(
-                    id = o.optString("id"),
-                    items = items,
-                    totalAmount = o.optLong("totalAmount"),
-                    paidAmount = o.optLong("paidAmount"),
-                    status = o.optString("status"),
-                    createdAt = o.optLong("createdAt"),
-                    deliveredAt = o.optLong("deliveredAt").takeIf { it > 0 }
-                )
-            }
+            (0 until arr.length()).map { i -> parseOrder(arr.getJSONObject(i)) }
         } catch (_: Exception) { emptyList() }
     }
 
-    suspend fun placeOrder(customerId: String, items: List<OrderItem>): Boolean = withContext(Dispatchers.IO) {
-        if (!ApiConfig.isConfigured) return@withContext false
-        try {
-            val arr = JSONArray()
-            items.forEach {
-                arr.put(JSONObject().put("foodId", it.foodId).put("foodName", it.foodName).put("unitPrice", it.unitPrice).put("quantity", it.quantity))
-            }
-            val c = conn("/api/orders", "POST")
-            c.doOutput = true
-            c.setRequestProperty("Content-Type", "application/json; charset=utf-8")
-            OutputStreamWriter(c.outputStream, Charsets.UTF_8).use {
-                it.write(JSONObject().put("customerId", customerId).put("items", arr).put("paidNow", 0).toString())
-            }
-            val ok = c.responseCode in 200..299
-            c.disconnect()
-            ok
-        } catch (_: Exception) { false }
-    }
+    suspend fun placeOrder(customerId: String, items: List<OrderItem>): Boolean =
+        withContext(Dispatchers.IO) {
+            if (!ApiConfig.isConfigured) return@withContext false
+            try {
+                val arr = JSONArray()
+                items.forEach {
+                    arr.put(
+                        JSONObject()
+                            .put("foodId", it.foodId)
+                            .put("foodName", it.foodName)
+                            .put("unitPrice", it.unitPrice)
+                            .put("quantity", it.quantity)
+                    )
+                }
+                val c = conn("/api/orders", "POST")
+                write(
+                    c,
+                    JSONObject()
+                        .put("customerId", customerId)
+                        .put("items", arr)
+                        .put("paidNow", 0)
+                        .put("source", "online")
+                )
+                val ok = c.responseCode in 200..299
+                c.disconnect()
+                ok
+            } catch (_: Exception) { false }
+        }
 
     suspend fun confirmDelivered(orderId: String): Boolean = withContext(Dispatchers.IO) {
         if (!ApiConfig.isConfigured) return@withContext false
         try {
             val c = conn("/api/orders/$orderId/status", "PATCH")
-            c.doOutput = true
-            c.setRequestProperty("Content-Type", "application/json; charset=utf-8")
-            OutputStreamWriter(c.outputStream, Charsets.UTF_8).use {
-                it.write(JSONObject().put("status", "delivered").put("byCustomer", true).toString())
-            }
+            write(c, JSONObject().put("status", "delivered").put("byCustomer", true))
             val ok = c.responseCode in 200..299
             c.disconnect()
             ok
         } catch (_: Exception) { false }
+    }
+
+    suspend fun rateOrder(orderId: String, rating: Int, comment: String): Boolean =
+        withContext(Dispatchers.IO) {
+            if (!ApiConfig.isConfigured) return@withContext false
+            try {
+                val c = conn("/api/ratings", "POST")
+                write(
+                    c,
+                    JSONObject()
+                        .put("orderId", orderId)
+                        .put("rating", rating)
+                        .put("comment", comment)
+                )
+                val ok = c.responseCode in 200..299
+                c.disconnect()
+                ok
+            } catch (_: Exception) { false }
+        }
+
+    private fun parseCustomer(o: JSONObject): Customer {
+        val a = o.optJSONObject("address")
+        return Customer(
+            id = o.optString("id"),
+            name = o.optString("name"),
+            phone = o.optString("phone"),
+            subscriptionCode = o.optString("subscriptionCode").ifBlank { null },
+            debt = o.optLong("debt"),
+            credit = o.optLong("credit"),
+            address = Address(a?.optString("street") ?: "", a?.optString("city") ?: "")
+        )
+    }
+
+    private fun parseOrder(o: JSONObject): Order {
+        val itemsArr = o.optJSONArray("items") ?: JSONArray()
+        val items = (0 until itemsArr.length()).map { j ->
+            val it = itemsArr.getJSONObject(j)
+            OrderItem(
+                it.optString("foodId"), it.optString("foodName"),
+                it.optLong("unitPrice"), it.optInt("quantity", 1)
+            )
+        }
+        return Order(
+            id = o.optString("id"),
+            items = items,
+            totalAmount = o.optLong("totalAmount"),
+            paidAmount = o.optLong("paidAmount"),
+            status = o.optString("status"),
+            createdAt = o.optLong("createdAt"),
+            deliveredAt = o.optLong("deliveredAt").takeIf { it > 0 },
+            rated = o.optBoolean("rated")
+        )
     }
 }

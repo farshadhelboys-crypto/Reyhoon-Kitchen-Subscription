@@ -1,7 +1,7 @@
 package com.reyhoon.customer
 
 object ApiConfig {
-    /** همان آدرس Worker اپ آشپزخانه */
-    var baseUrl: String = ""
+    /** آدرس Worker شما */
+    var baseUrl: String = "https://reyhoon-api.farshadhelboys.workers.dev"
     val isConfigured: Boolean get() = baseUrl.isNotBlank() && baseUrl.startsWith("http")
 }

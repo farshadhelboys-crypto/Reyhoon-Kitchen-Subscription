@@ -1,14 +1,8 @@
 package com.reyhoon.kitchen.data
 
-/**
- * بعد از دیپلوی Worker، آدرس را اینجا بگذارید.
- * مثال: https://reyhoon-api.your-subdomain.workers.dev
- *
- * اگر خالی باشد اپ در حالت آفلاین (حافظه محلی) کار می‌کند.
- */
 object ApiConfig {
-    /** آدرس Worker — حتماً بدون اسلش پایانی */
-    var baseUrl: String = ""
+    /** آدرس Worker — آنلاین */
+    var baseUrl: String = "https://reyhoon-api.farshadhelboys.workers.dev"
 
     const val ADMIN_KEY = "reyhoon-admin-2024"
 
