@@ -1,17 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">ریحون | اشتراک آشپزخانه</string>
-    <string name="enter_code_title">ورود کد اشتراک</string>
-    <string name="enter_code_hint">کد اشتراک خود را وارد کنید</string>
-    <string name="verify_code">تایید کد</string>
-    <string name="home_title">خانه</string>
-    <string name="menu_title">منوی غذا</string>
-    <string name="address_title">آدرس تحویل</string>
-    <string name="subscription_info">اطلاعات اشتراک</string>
-    <string name="edit_address">ویرایش آدرس</string>
-    <string name="save">ذخیره</string>
-    <string name="price_unit">تومان</string>
-    <string name="welcome">به آشپزخانه ریحون خوش آمدید</string>
-    <string name="invalid_code">کد اشتراک نامعتبر است</string>
-    <string name="code_example">مثال: REYHOON123</string>
+    <string name="app_name">ریحون | اشتراک و حسابداری</string>
 </resources>
