@@ -1,5 +1,9 @@
 /**
- * Reyhoon API - Service Worker format + UTF-8 safe Persian (\\u escapes)
+ * Reyhoon API
+ * - ثبت‌نام آزاد مشتری (بدون ادمین)
+ * - سفارش آنلاین
+ * - امتیاز پیک
+ * - پنل HTML فقط منو/قیمت
  */
 
 var CORS = {
@@ -8,7 +12,7 @@ var CORS = {
   "Access-Control-Allow-Headers": "Content-Type, X-Admin-Key"
 };
 
-var mem = { menu: [], customers: [], orders: [], payments: [] };
+var mem = { menu: [], customers: [], orders: [], payments: [], ratings: [] };
 
 function json(data, status) {
   status = status || 200;
@@ -53,6 +57,13 @@ function uid() {
   return crypto.randomUUID();
 }
 
+function genCode() {
+  var chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  var s = "RH";
+  for (var i = 0; i < 4; i++) s += chars.charAt(Math.floor(Math.random() * chars.length));
+  return s;
+}
+
 function isAdmin(req, env) {
   var key = req.headers.get("X-Admin-Key") || "";
   return key && key === (env.ADMIN_KEY || "reyhoon-admin-2024");
@@ -74,13 +85,14 @@ async function handleRequest(request) {
 
   try {
     if (path === "/" || path === "/admin") {
-      return html(adminHtml());
+      return html(menuAdminHtml());
     }
 
     if (path === "/api/health") {
       return json({ ok: true, service: "reyhoon-api", ts: Date.now() });
     }
 
+    // ---------- Menu (GET public, write admin) ----------
     if (path === "/api/menu" && request.method === "GET") {
       return json(await load(env, "menu"));
     }
@@ -123,43 +135,84 @@ async function handleRequest(request) {
       return json({ ok: true });
     }
 
-    if (path === "/api/customers" && request.method === "GET") {
-      if (!isAdmin(request, env)) return json({ error: "unauthorized" }, 401);
-      return json(await load(env, "customers"));
-    }
-
-    if (path === "/api/customers" && request.method === "POST") {
-      if (!isAdmin(request, env)) return json({ error: "unauthorized" }, 401);
+    // ---------- Public self-register (new customer) ----------
+    if (path === "/api/customers/register" && request.method === "POST") {
       body = await request.json();
+      var name = (body.name || "").trim();
+      var phone = (body.phone || "").trim();
+      if (!name || !phone) return json({ error: "name and phone required" }, 400);
+
       var customers = await load(env, "customers");
+      // if phone exists, return existing
+      var existing = customers.find(function (x) { return x.phone === phone; });
+      if (existing) {
+        return json({ customer: existing, isNew: false, message: "already_registered" });
+      }
+
+      var code = genCode();
+      // ensure unique code
+      while (customers.some(function (x) { return x.subscriptionCode === code; })) {
+        code = genCode();
+      }
+
       var c = {
         id: uid(),
-        name: body.name || "",
-        phone: body.phone || "",
+        name: name,
+        phone: phone,
         address: body.address || { street: "", city: "", postalCode: "", notes: "" },
-        subscriptionCode: body.subscriptionCode || null,
+        subscriptionCode: code,
+        debt: 0,
+        credit: 0,
+        notes: "",
+        createdAt: Date.now(),
+        isSelfRegistered: true
+      };
+      customers.push(c);
+      await save(env, "customers", customers);
+      return json({ customer: c, isNew: true, message: "registered" }, 201);
+    }
+
+    // Kitchen/admin create customer
+    if (path === "/api/customers" && request.method === "POST") {
+      body = await request.json();
+      customers = await load(env, "customers");
+      code = (body.subscriptionCode || "").trim() || genCode();
+      while (customers.some(function (x) { return x.subscriptionCode === code; })) {
+        code = genCode();
+      }
+      c = {
+        id: uid(),
+        name: (body.name || "").trim(),
+        phone: (body.phone || "").trim(),
+        address: body.address || { street: "", city: "", postalCode: "", notes: "" },
+        subscriptionCode: code,
         debt: Number(body.debt) || 0,
         credit: Number(body.credit) || 0,
         notes: body.notes || "",
-        createdAt: Date.now()
+        createdAt: Date.now(),
+        isSelfRegistered: false
       };
+      if (!c.name || !c.phone) return json({ error: "name and phone required" }, 400);
       customers.push(c);
       await save(env, "customers", customers);
       return json(c, 201);
     }
 
+    if (path === "/api/customers" && request.method === "GET") {
+      return json(await load(env, "customers"));
+    }
+
     if (path.indexOf("/api/customers/code/") === 0 && request.method === "GET") {
-      var code = decodeURIComponent(path.split("/").pop());
+      var q = decodeURIComponent(path.split("/").pop());
       customers = await load(env, "customers");
       c = customers.find(function (x) {
-        return x.subscriptionCode && x.subscriptionCode.toLowerCase() === code.toLowerCase();
+        return x.subscriptionCode && x.subscriptionCode.toLowerCase() === q.toLowerCase();
       });
       if (!c) return json({ error: "not found" }, 404);
       return json(c);
     }
 
     if (path.indexOf("/api/customers/") === 0 && path.indexOf("/code/") < 0 && request.method === "PUT") {
-      if (!isAdmin(request, env)) return json({ error: "unauthorized" }, 401);
       id = path.split("/").pop();
       body = await request.json();
       customers = await load(env, "customers");
@@ -170,15 +223,7 @@ async function handleRequest(request) {
       return json(customers[i]);
     }
 
-    if (path.indexOf("/api/customers/") === 0 && path.indexOf("/code/") < 0 && request.method === "DELETE") {
-      if (!isAdmin(request, env)) return json({ error: "unauthorized" }, 401);
-      id = path.split("/").pop();
-      customers = await load(env, "customers");
-      customers = customers.filter(function (x) { return x.id !== id; });
-      await save(env, "customers", customers);
-      return json({ ok: true });
-    }
-
+    // ---------- Orders ----------
     if (path === "/api/orders" && request.method === "GET") {
       var customerId = url.searchParams.get("customerId");
       var statusFilter = url.searchParams.get("status");
@@ -216,16 +261,20 @@ async function handleRequest(request) {
         customerId: customer.id,
         customerName: customer.name,
         customerPhone: customer.phone || "",
+        customerCode: customer.subscriptionCode || "",
+        isNewCustomer: !!customer.isSelfRegistered && !customer._orderedBefore,
         items: items,
         totalAmount: total,
         paidAmount: creditApplied + cashUsed,
         creditApplied: creditApplied,
         status: "registered",
+        source: body.source || "online",
         createdAt: Date.now(),
         preparingAt: null,
         shippedAt: null,
         deliveredAt: null,
-        note: body.note || ""
+        note: body.note || "",
+        rated: false
       };
 
       orders = await load(env, "orders");
@@ -233,7 +282,11 @@ async function handleRequest(request) {
       await save(env, "orders", orders);
 
       var ci = customers.findIndex(function (x) { return x.id === customer.id; });
-      customers[ci] = Object.assign({}, customers[ci], { debt: debt, credit: credit });
+      customers[ci] = Object.assign({}, customers[ci], {
+        debt: debt,
+        credit: credit,
+        _orderedBefore: true
+      });
       await save(env, "customers", customers);
 
       return json({ order: order, customer: customers[ci] }, 201);
@@ -272,19 +325,64 @@ async function handleRequest(request) {
       return json({ count: list.length, orders: list });
     }
 
-    if (path === "/api/payments" && request.method === "POST") {
-      if (!isAdmin(request, env)) return json({ error: "unauthorized" }, 401);
+    // ---------- Delivery ratings ----------
+    if (path === "/api/ratings" && request.method === "POST") {
       body = await request.json();
-      var amount = Number(body.amount) || 0;
-      if (amount <= 0) return json({ error: "invalid amount" }, 400);
+      var rating = Number(body.rating) || 0;
+      if (rating < 1 || rating > 5) return json({ error: "rating 1-5" }, 400);
+      if (!body.orderId) return json({ error: "orderId required" }, 400);
 
+      orders = await load(env, "orders");
+      var oi = orders.findIndex(function (x) { return x.id === body.orderId; });
+      if (oi < 0) return json({ error: "order not found" }, 404);
+      if (orders[oi].status !== "delivered") {
+        return json({ error: "order not delivered yet" }, 400);
+      }
+
+      var ratings = await load(env, "ratings");
+      if (ratings.some(function (r) { return r.orderId === body.orderId; })) {
+        return json({ error: "already rated" }, 400);
+      }
+
+      var r = {
+        id: uid(),
+        orderId: body.orderId,
+        customerId: orders[oi].customerId,
+        customerName: orders[oi].customerName,
+        rating: rating,
+        comment: (body.comment || "").trim(),
+        createdAt: Date.now()
+      };
+      ratings.unshift(r);
+      await save(env, "ratings", ratings);
+
+      orders[oi] = Object.assign({}, orders[oi], { rated: true });
+      await save(env, "orders", orders);
+
+      return json(r, 201);
+    }
+
+    if (path === "/api/ratings" && request.method === "GET") {
+      ratings = await load(env, "ratings");
+      ratings.sort(function (a, b) { return b.createdAt - a.createdAt; });
+      var avg = ratings.length
+        ? ratings.reduce(function (s, x) { return s + x.rating; }, 0) / ratings.length
+        : 0;
+      return json({ ratings: ratings, average: Math.round(avg * 10) / 10, count: ratings.length });
+    }
+
+    // Payments (kitchen accounting)
+    if (path === "/api/payments" && request.method === "POST") {
+      body = await request.json();
+      amount = Number(body.amount) || 0;
+      if (amount <= 0) return json({ error: "invalid amount" }, 400);
       customers = await load(env, "customers");
       ci = customers.findIndex(function (x) { return x.id === body.customerId; });
       if (ci < 0) return json({ error: "customer not found" }, 404);
 
       var remainingPay = amount;
       orders = await load(env, "orders");
-      var open = orders
+      open = orders
         .map(function (ord, idx) { return { o: ord, idx: idx }; })
         .filter(function (x) {
           return x.o.customerId === body.customerId && x.o.totalAmount - x.o.paidAmount > 0;
@@ -293,7 +391,7 @@ async function handleRequest(request) {
 
       for (var k = 0; k < open.length; k++) {
         if (remainingPay <= 0) break;
-        var rem = open[k].o.totalAmount - open[k].o.paidAmount;
+        rem = open[k].o.totalAmount - open[k].o.paidAmount;
         var pay = Math.min(remainingPay, rem);
         orders[open[k].idx] = Object.assign({}, open[k].o, {
           paidAmount: open[k].o.paidAmount + pay
@@ -312,7 +410,7 @@ async function handleRequest(request) {
       await save(env, "customers", customers);
 
       var payments = await load(env, "payments");
-      var p = {
+      p = {
         id: uid(),
         customerId: body.customerId,
         amount: amount,
@@ -321,7 +419,6 @@ async function handleRequest(request) {
       };
       payments.unshift(p);
       await save(env, "payments", payments);
-
       return json({ payment: p, customer: customers[ci] });
     }
 
@@ -331,124 +428,66 @@ async function handleRequest(request) {
   }
 }
 
-/* Persian via \u so file stays ASCII-safe in CF editor */
-function adminHtml() {
-  var t = {
-    title: "\u067e\u0646\u0644 \u0627\u062f\u0645\u06cc\u0646 \u0631\u06cc\u062d\u0648\u0646",
-    h1: "\u067e\u0646\u0644 \u0627\u062f\u0645\u06cc\u0646 \u0622\u0634\u067e\u0632\u062e\u0627\u0646\u0647 \u0631\u06cc\u062d\u0648\u0646",
-    login: "\u0648\u0631\u0648\u062f \u0627\u062f\u0645\u06cc\u0646",
-    keyHint: "\u06a9\u0644\u06cc\u062f \u067e\u06cc\u0634\u200c\u0641\u0631\u0636: reyhoon-admin-2024",
-    keyLabel: "\u06a9\u0644\u06cc\u062f \u0627\u062f\u0645\u06cc\u0646",
-    enter: "\u0648\u0631\u0648\u062f",
-    tabMenu: "\u0645\u0646\u0648\u06cc \u063a\u0630\u0627",
-    tabOrders: "\u0633\u0641\u0627\u0631\u0634\u200c\u0647\u0627",
-    tabCust: "\u0645\u0634\u062a\u0631\u06cc\u0627\u0646",
-    addFood: "\u0627\u0641\u0632\u0648\u062f\u0646 / \u0648\u06cc\u0631\u0627\u06cc\u0634 \u063a\u0630\u0627",
-    name: "\u0646\u0627\u0645 \u063a\u0630\u0627",
-    price: "\u0642\u06cc\u0645\u062a (\u062a\u0648\u0645\u0627\u0646)",
-    cat: "\u062f\u0633\u062a\u0647",
-    desc: "\u062a\u0648\u0636\u06cc\u062d",
-    save: "\u0630\u062e\u06cc\u0631\u0647 \u062f\u0631 \u0645\u0646\u0648",
-    clear: "\u067e\u0627\u06a9 \u06a9\u0631\u062f\u0646 \u0641\u0631\u0645",
-    menuList: "\u0644\u06cc\u0633\u062a \u0645\u0646\u0648",
-    refresh: "\u0628\u0631\u0648\u0632\u0631\u0633\u0627\u0646\u06cc",
-    colName: "\u0646\u0627\u0645",
-    colPrice: "\u0642\u06cc\u0645\u062a",
-    colCat: "\u062f\u0633\u062a\u0647",
-    colAct: "\u0639\u0645\u0644\u06cc\u0627\u062a",
-    orders: "\u0633\u0641\u0627\u0631\u0634\u200c\u0647\u0627",
-    addCust: "\u0627\u0641\u0632\u0648\u062f\u0646 \u0645\u0634\u062a\u0631\u06cc",
-    cName: "\u0646\u0627\u0645",
-    cPhone: "\u062a\u0644\u0641\u0646",
-    cCode: "\u06a9\u062f \u0627\u0634\u062a\u0631\u0627\u06a9",
-    cAddr: "\u0622\u062f\u0631\u0633",
-    cCity: "\u0634\u0647\u0631",
-    saveCust: "\u062b\u0628\u062a \u0645\u0634\u062a\u0631\u06cc",
-    custList: "\u0644\u06cc\u0633\u062a \u0645\u0634\u062a\u0631\u06cc\u0627\u0646",
-    gen: "\u0639\u0645\u0648\u0645\u06cc"
-  };
-
-  return "<!DOCTYPE html>\n<html lang=\"fa\" dir=\"rtl\">\n<head>\n" +
-    "<meta charset=\"utf-8\"/>\n" +
-    "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"/>\n" +
-    "<title>" + t.title + "</title>\n<style>\n" +
-    ":root{--g:#2E7D32;--g2:#1B5E20;--bg:#F1F8E9;--card:#fff;--t:#0A0A0A;--muted:#3D5C40;--err:#C62828;--ok:#2E7D32}\n" +
-    "*{box-sizing:border-box}body{margin:0;font-family:Tahoma,'Segoe UI',sans-serif;background:var(--bg);color:var(--t);font-size:16px}\n" +
-    "header{background:linear-gradient(135deg,var(--g2),var(--g));color:#fff;padding:16px 20px}\n" +
-    "header h1{margin:0;font-size:1.35rem}.wrap{max-width:960px;margin:0 auto;padding:16px}\n" +
-    ".card{background:var(--card);border-radius:14px;padding:16px;margin-bottom:16px;box-shadow:0 2px 10px rgba(0,0,0,.08)}\n" +
-    "label{display:block;font-weight:700;margin:8px 0 4px}\n" +
-    "input{width:100%;padding:10px 12px;border:1px solid #c5d6c7;border-radius:10px;font-size:1rem}\n" +
-    "button{cursor:pointer;border:none;border-radius:10px;padding:10px 16px;font-size:1rem;font-weight:700}\n" +
-    ".btn{background:var(--g);color:#fff}.btn-danger{background:var(--err);color:#fff}\n" +
-    ".btn-outline{background:#fff;border:2px solid var(--g);color:var(--g)}\n" +
-    ".row{display:flex;flex-wrap:wrap;gap:10px}.row>*{flex:1;min-width:140px}\n" +
-    "table{width:100%;border-collapse:collapse}th,td{text-align:right;padding:10px 8px;border-bottom:1px solid #e0e0e0}\n" +
-    "th{background:#E8F5E9}.tabs{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap}\n" +
-    ".tab{background:#fff;border:2px solid var(--g);color:var(--g)}.tab.active{background:var(--g);color:#fff}\n" +
-    ".msg{padding:10px;border-radius:8px;margin:8px 0;display:none}\n" +
-    ".msg.ok{display:block;background:#E8F5E9;color:var(--ok)}.msg.err{display:block;background:#FFEBEE;color:var(--err)}\n" +
-    ".login-box{max-width:400px;margin:40px auto}.price{color:#E65100;font-weight:700}\n" +
-    ".badge{display:inline-block;padding:2px 8px;border-radius:8px;background:#E8F5E9;font-size:.85rem}\n" +
-    "</style></head><body>\n" +
-    "<header><h1>" + t.h1 + "</h1><span id=\"hdrStatus\"></span></header>\n" +
-    "<div class=\"wrap\">\n" +
-    "<div id=\"loginView\" class=\"card login-box\">\n" +
-    "<h2>" + t.login + "</h2>\n" +
-    "<p style=\"color:var(--muted)\">" + t.keyHint + "</p>\n" +
-    "<label>" + t.keyLabel + "</label>\n" +
-    "<input id=\"adminKey\" type=\"password\"/>\n" +
-    "<div style=\"margin-top:12px\"><button class=\"btn\" onclick=\"doLogin()\">" + t.enter + "</button></div>\n" +
-    "<div id=\"loginMsg\" class=\"msg\"></div></div>\n" +
-    "<div id=\"appView\" style=\"display:none\">\n" +
-    "<div class=\"tabs\">\n" +
-    "<button class=\"tab active\" data-tab=\"menu\" onclick=\"showTab('menu')\">" + t.tabMenu + "</button>\n" +
-    "<button class=\"tab\" data-tab=\"orders\" onclick=\"showTab('orders')\">" + t.tabOrders + "</button>\n" +
-    "<button class=\"tab\" data-tab=\"customers\" onclick=\"showTab('customers')\">" + t.tabCust + "</button>\n" +
-    "</div><div id=\"flash\" class=\"msg\"></div>\n" +
-    "<div id=\"tab-menu\">\n" +
-    "<div class=\"card\"><h3>" + t.addFood + "</h3>\n" +
-    "<input type=\"hidden\" id=\"foodId\"/>\n" +
-    "<div class=\"row\"><div><label>" + t.name + "</label><input id=\"foodName\"/></div>\n" +
-    "<div><label>" + t.price + "</label><input id=\"foodPrice\" type=\"number\"/></div></div>\n" +
-    "<div class=\"row\"><div><label>" + t.cat + "</label><input id=\"foodCat\" value=\"" + t.gen + "\"/></div>\n" +
-    "<div><label>" + t.desc + "</label><input id=\"foodDesc\"/></div></div>\n" +
-    "<div style=\"margin-top:12px\" class=\"row\">\n" +
-    "<button class=\"btn\" onclick=\"saveFood()\">" + t.save + "</button>\n" +
-    "<button class=\"btn-outline\" onclick=\"clearFoodForm()\">" + t.clear + "</button></div></div>\n" +
-    "<div class=\"card\"><h3>" + t.menuList + " <button class=\"btn-outline\" style=\"float:left\" onclick=\"loadMenu()\">" + t.refresh + "</button></h3>\n" +
-    "<div style=\"overflow-x:auto\"><table><thead><tr><th>" + t.colName + "</th><th>" + t.colPrice + "</th><th>" + t.colCat + "</th><th>" + t.colAct + "</th></tr></thead>\n" +
-    "<tbody id=\"menuBody\"></tbody></table></div></div></div>\n" +
-    "<div id=\"tab-orders\" style=\"display:none\"><div class=\"card\">\n" +
-    "<h3>" + t.orders + " <button class=\"btn-outline\" style=\"float:left\" onclick=\"loadOrders()\">" + t.refresh + "</button></h3>\n" +
-    "<div id=\"ordersList\"></div></div></div>\n" +
-    "<div id=\"tab-customers\" style=\"display:none\">\n" +
-    "<div class=\"card\"><h3>" + t.addCust + "</h3>\n" +
-    "<div class=\"row\"><div><label>" + t.cName + "</label><input id=\"cName\"/></div><div><label>" + t.cPhone + "</label><input id=\"cPhone\"/></div></div>\n" +
-    "<div class=\"row\"><div><label>" + t.cCode + "</label><input id=\"cCode\"/></div><div><label>" + t.cAddr + "</label><input id=\"cStreet\"/></div></div>\n" +
-    "<div class=\"row\"><div><label>" + t.cCity + "</label><input id=\"cCity\"/></div>\n" +
-    "<div style=\"display:flex;align-items:flex-end\"><button class=\"btn\" onclick=\"addCustomer()\">" + t.saveCust + "</button></div></div></div>\n" +
-    "<div class=\"card\"><h3>" + t.custList + " <button class=\"btn-outline\" style=\"float:left\" onclick=\"loadCustomers()\">" + t.refresh + "</button></h3>\n" +
-    "<div id=\"custList\"></div></div></div></div></div>\n" +
-    "<script>\n" +
-    "var API=location.origin;var KEY=localStorage.getItem('reyhoon_admin_key')||'';\n" +
-    "function headers(j){var h={'X-Admin-Key':KEY};if(j)h['Content-Type']='application/json';return h}\n" +
-    "function flash(m,ok){var el=document.getElementById('flash');el.className='msg '+(ok?'ok':'err');el.textContent=m;setTimeout(function(){el.className='msg'},4000)}\n" +
-    "function fmt(n){return Number(n||0).toLocaleString('fa-IR')}\n" +
-    "function fmtTime(ts){if(!ts)return '-';return new Date(ts).toLocaleString('fa-IR')}\n" +
-    "var statusFa={registered:'\u0633\u0641\u0627\u0631\u0634 \u062b\u0628\u062a \u0634\u062f',preparing:'\u062f\u0631 \u062d\u0627\u0644 \u0622\u0645\u0627\u062f\u0647\u200c\u0633\u0627\u0632\u06cc',shipped:'\u0627\u0631\u0633\u0627\u0644 \u0634\u062f\u0647',delivered:'\u062a\u062d\u0648\u06cc\u0644 \u062f\u0627\u062f\u0647 \u0634\u062f'};\n" +
-    "async function doLogin(){KEY=document.getElementById('adminKey').value.trim();try{var r2=await fetch(API+'/api/customers',{headers:headers()});if(r2.status===401)throw new Error('\u06a9\u0644\u06cc\u062f \u0627\u0634\u062a\u0628\u0627\u0647');localStorage.setItem('reyhoon_admin_key',KEY);document.getElementById('loginView').style.display='none';document.getElementById('appView').style.display='block';document.getElementById('hdrStatus').textContent='\u0645\u062a\u0635\u0644';loadMenu();loadOrders();loadCustomers()}catch(e){var m=document.getElementById('loginMsg');m.className='msg err';m.textContent=e.message}}\n" +
-    "if(KEY){document.getElementById('adminKey').value=KEY;doLogin()}\n" +
-    "function showTab(name){['menu','orders','customers'].forEach(function(t){document.getElementById('tab-'+t).style.display=t===name?'block':'none'});document.querySelectorAll('.tab').forEach(function(b){b.classList.toggle('active',b.dataset.tab===name)})}\n" +
-    "function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/\"/g,'&quot;')}\n" +
-    "async function loadMenu(){var r=await fetch(API+'/api/menu');var list=await r.json();var tb=document.getElementById('menuBody');tb.innerHTML=list.map(function(f){return '<tr><td><b>'+esc(f.name)+'</b></td><td class=\"price\">'+fmt(f.price)+'</td><td><span class=\"badge\">'+esc(f.category||'')+'</span></td><td><button class=\"btn-outline\" onclick=\'editFood('+JSON.stringify(f)+')\'>\u0648\u06cc\u0631\u0627\u06cc\u0634</button> <button class=\"btn-danger\" onclick=\"delFood(\\''+f.id+'\\')\">\u062d\u0630\u0641</button></td></tr>'}).join('')||'<tr><td colspan=\"4\">\u0645\u0646\u0648 \u062e\u0627\u0644\u06cc \u0627\u0633\u062a</td></tr>'}\n" +
-    "function clearFoodForm(){foodId.value='';foodName.value='';foodPrice.value='';foodCat.value='\u0639\u0645\u0648\u0645\u06cc';foodDesc.value=''}\n" +
-    "function editFood(f){foodId.value=f.id;foodName.value=f.name;foodPrice.value=f.price;foodCat.value=f.category||'\u0639\u0645\u0648\u0645\u06cc';foodDesc.value=f.description||''}\n" +
-    "async function saveFood(){var id=foodId.value;var body={name:foodName.value.trim(),price:Number(foodPrice.value)||0,category:foodCat.value.trim()||'\u0639\u0645\u0648\u0645\u06cc',description:foodDesc.value.trim(),isAvailable:true};if(!body.name)return flash('\u0646\u0627\u0645 \u0644\u0627\u0632\u0645 \u0627\u0633\u062a',false);var r=await fetch(API+(id?'/api/menu/'+id:'/api/menu'),{method:id?'PUT':'POST',headers:headers(true),body:JSON.stringify(body)});if(!r.ok)return flash('\u062e\u0637\u0627',false);flash('\u0630\u062e\u06cc\u0631\u0647 \u0634\u062f',true);clearFoodForm();loadMenu()}\n" +
-    "async function delFood(id){if(!confirm('\u062d\u0630\u0641\u061f'))return;await fetch(API+'/api/menu/'+id,{method:'DELETE',headers:headers()});flash('\u062d\u0630\u0641 \u0634\u062f',true);loadMenu()}\n" +
-    "async function loadOrders(){var r=await fetch(API+'/api/orders');var list=await r.json();document.getElementById('ordersList').innerHTML=list.map(function(o){return '<div style=\"border:1px solid #e0e0e0;border-radius:12px;padding:12px;margin-bottom:10px\"><b>'+esc(o.customerName)+'</b> \u2014 <span class=\"badge\">'+(statusFa[o.status]||o.status)+'</span><br/><small>\u062b\u0628\u062a: '+fmtTime(o.createdAt)+(o.deliveredAt?' | \u062a\u062d\u0648\u06cc\u0644: '+fmtTime(o.deliveredAt):'')+'</small><br/>'+(o.items||[]).map(function(i){return esc(i.foodName)+' \u00d7'+i.quantity}).join('\u060c ')+'<br/><span class=\"price\">'+fmt(o.totalAmount)+' \u062a\u0648\u0645\u0627\u0646</span><div class=\"row\" style=\"margin-top:8px\"><button class=\"btn-outline\" onclick=\"setStatus(\\''+o.id+'\\',\\'preparing\\')\">\u0622\u0645\u0627\u062f\u0647\u200c\u0633\u0627\u0632\u06cc</button><button class=\"btn-outline\" onclick=\"setStatus(\\''+o.id+'\\',\\'shipped\\')\">\u0627\u0631\u0633\u0627\u0644</button><button class=\"btn\" onclick=\"setStatus(\\''+o.id+'\\',\\'delivered\\')\">\u062a\u062d\u0648\u06cc\u0644</button></div></div>'}).join('')||'<p>\u0633\u0641\u0627\u0631\u0634\u06cc \u0646\u06cc\u0633\u062a</p>'}\n" +
-    "async function setStatus(id,status){await fetch(API+'/api/orders/'+id+'/status',{method:'PATCH',headers:headers(true),body:JSON.stringify({status:status,byKitchen:true})});flash('\u0648\u0636\u0639\u06cc\u062a \u0628\u0647\u200c\u0631\u0648\u0632 \u0634\u062f',true);loadOrders()}\n" +
-    "async function loadCustomers(){var r=await fetch(API+'/api/customers',{headers:headers()});if(!r.ok)return;var list=await r.json();document.getElementById('custList').innerHTML=list.map(function(c){return '<div style=\"border-bottom:1px solid #eee;padding:10px 0\"><b>'+esc(c.name)+'</b> \u2014 '+esc(c.phone)+' \u2014 \u06a9\u062f: <b>'+esc(c.subscriptionCode||'-')+'</b><br/><small>'+esc((c.address&&c.address.street)||'')+' '+esc((c.address&&c.address.city)||'')+'</small><br/>\u0628\u062f\u0647\u06cc: <span style=\"color:var(--err)\">'+fmt(c.debt)+'</span> | \u0627\u0639\u062a\u0628\u0627\u0631: <span style=\"color:var(--ok)\">'+fmt(c.credit)+'</span></div>'}).join('')||'<p>\u0645\u0634\u062a\u0631\u06cc \u0646\u06cc\u0633\u062a</p>'}\n" +
-    "async function addCustomer(){var body={name:cName.value.trim(),phone:cPhone.value.trim(),subscriptionCode:cCode.value.trim()||null,address:{street:cStreet.value.trim(),city:cCity.value.trim(),postalCode:'',notes:''}};if(!body.name||!body.phone)return flash('\u0646\u0627\u0645 \u0648 \u062a\u0644\u0641\u0646 \u0644\u0627\u0632\u0645 \u0627\u0633\u062a',false);var r=await fetch(API+'/api/customers',{method:'POST',headers:headers(true),body:JSON.stringify(body)});if(!r.ok)return flash('\u062e\u0637\u0627',false);flash('\u0645\u0634\u062a\u0631\u06cc \u0627\u0636\u0627\u0641\u0647 \u0634\u062f',true);cName.value=cPhone.value=cCode.value=cStreet.value=cCity.value='';loadCustomers()}\n" +
+/** پنل فقط منو و قیمت */
+function menuAdminHtml() {
+  return "<!DOCTYPE html><html lang=\"fa\" dir=\"rtl\"><head><meta charset=\"utf-8\"/>" +
+    "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"/>" +
+    "<title>\u0645\u062f\u06cc\u0631\u06cc\u062a \u0645\u0646\u0648 \u0631\u06cc\u062d\u0648\u0646</title>" +
+    "<style>" +
+    "body{margin:0;font-family:Tahoma,sans-serif;background:#F1F8E9;color:#0A0A0A;font-size:16px}" +
+    "header{background:#1B5E20;color:#fff;padding:16px 20px}h1{margin:0;font-size:1.3rem}" +
+    ".wrap{max-width:720px;margin:0 auto;padding:16px}.card{background:#fff;border-radius:14px;padding:16px;margin-bottom:14px;box-shadow:0 2px 8px rgba(0,0,0,.08)}" +
+    "label{display:block;font-weight:700;margin:8px 0 4px}input{width:100%;padding:10px;border:1px solid #c5d6c7;border-radius:10px;font-size:1rem;box-sizing:border-box}" +
+    "button{cursor:pointer;border:none;border-radius:10px;padding:10px 16px;font-weight:700;font-size:1rem}" +
+    ".btn{background:#2E7D32;color:#fff}.btn-danger{background:#C62828;color:#fff}.btn-outline{background:#fff;border:2px solid #2E7D32;color:#2E7D32}" +
+    ".row{display:flex;flex-wrap:wrap;gap:10px}.row>*{flex:1;min-width:120px}" +
+    "table{width:100%;border-collapse:collapse}th,td{padding:10px 6px;border-bottom:1px solid #eee;text-align:right}" +
+    "th{background:#E8F5E9}.price{color:#E65100;font-weight:700}.msg{padding:10px;border-radius:8px;margin:8px 0;display:none}" +
+    ".msg.ok{display:block;background:#E8F5E9;color:#2E7D32}.msg.err{display:block;background:#FFEBEE;color:#C62828}" +
+    "</style></head><body>" +
+    "<header><h1>\u0645\u062f\u06cc\u0631\u06cc\u062a \u0645\u0646\u0648 \u0648 \u0642\u06cc\u0645\u062a \u2014 \u0631\u06cc\u062d\u0648\u0646</h1></header>" +
+    "<div class=\"wrap\">" +
+    "<div class=\"card\" id=\"loginBox\">" +
+    "<p>\u06a9\u0644\u06cc\u062f \u0627\u062f\u0645\u06cc\u0646 (\u0641\u0642\u0637 \u0628\u0631\u0627\u06cc \u062a\u063a\u06cc\u06cc\u0631 \u0645\u0646\u0648): <b>reyhoon-admin-2024</b></p>" +
+    "<input id=\"adminKey\" type=\"password\" placeholder=\"\u06a9\u0644\u06cc\u062f\"/>" +
+    "<div style=\"margin-top:10px\"><button class=\"btn\" onclick=\"unlock()\">\u0648\u0631\u0648\u062f</button></div>" +
+    "<div id=\"loginMsg\" class=\"msg\"></div></div>" +
+    "<div id=\"app\" style=\"display:none\">" +
+    "<div id=\"flash\" class=\"msg\"></div>" +
+    "<div class=\"card\"><h3>\u0627\u0641\u0632\u0648\u062f\u0646 / \u0648\u06cc\u0631\u0627\u06cc\u0634 \u063a\u0630\u0627</h3>" +
+    "<input type=\"hidden\" id=\"foodId\"/>" +
+    "<div class=\"row\"><div><label>\u0646\u0627\u0645</label><input id=\"foodName\"/></div>" +
+    "<div><label>\u0642\u06cc\u0645\u062a (\u062a\u0648\u0645\u0627\u0646)</label><input id=\"foodPrice\" type=\"number\"/></div></div>" +
+    "<div class=\"row\"><div><label>\u062f\u0633\u062a\u0647</label><input id=\"foodCat\" value=\"\u0639\u0645\u0648\u0645\u06cc\"/></div>" +
+    "<div><label>\u062a\u0648\u0636\u06cc\u062d</label><input id=\"foodDesc\"/></div></div>" +
+    "<div style=\"margin-top:12px\" class=\"row\">" +
+    "<button class=\"btn\" onclick=\"saveFood()\">\u0630\u062e\u06cc\u0631\u0647</button>" +
+    "<button class=\"btn-outline\" onclick=\"clearForm()\">\u067e\u0627\u06a9</button></div></div>" +
+    "<div class=\"card\"><h3>\u0644\u06cc\u0633\u062a \u0645\u0646\u0648 <button class=\"btn-outline\" style=\"float:left\" onclick=\"loadMenu()\">\u0628\u0631\u0648\u0632\u0631\u0633\u0627\u0646\u06cc</button></h3>" +
+    "<table><thead><tr><th>\u0646\u0627\u0645</th><th>\u0642\u06cc\u0645\u062a</th><th></th></tr></thead><tbody id=\"tb\"></tbody></table>" +
+    "</div></div></div>" +
+    "<script>" +
+    "var API=location.origin;var KEY=localStorage.getItem('rk')||'';" +
+    "function H(j){var h={'X-Admin-Key':KEY};if(j)h['Content-Type']='application/json';return h}" +
+    "function flash(m,ok){var e=document.getElementById('flash');e.className='msg '+(ok?'ok':'err');e.textContent=m;setTimeout(function(){e.className='msg'},3500)}" +
+    "function fmt(n){return Number(n||0).toLocaleString('fa-IR')}" +
+    "async function unlock(){KEY=document.getElementById('adminKey').value.trim();" +
+    "var r=await fetch(API+'/api/menu',{method:'POST',headers:H(true),body:JSON.stringify({name:'__ping__',price:0})});" +
+    "if(r.status===401){document.getElementById('loginMsg').className='msg err';document.getElementById('loginMsg').textContent='\u06a9\u0644\u06cc\u062f \u0627\u0634\u062a\u0628\u0627\u0647';return}" +
+    "if(r.ok){var it=await r.json();await fetch(API+'/api/menu/'+it.id,{method:'DELETE',headers:H()});}" +
+    "localStorage.setItem('rk',KEY);document.getElementById('loginBox').style.display='none';document.getElementById('app').style.display='block';loadMenu()}" +
+    "if(KEY){document.getElementById('adminKey').value=KEY;unlock()}" +
+    "function clearForm(){foodId.value='';foodName.value='';foodPrice.value='';foodCat.value='\u0639\u0645\u0648\u0645\u06cc';foodDesc.value=''}" +
+    "function editF(f){foodId.value=f.id;foodName.value=f.name;foodPrice.value=f.price;foodCat.value=f.category||'';foodDesc.value=f.description||''}" +
+    "async function loadMenu(){var r=await fetch(API+'/api/menu');var list=await r.json();" +
+    "document.getElementById('tb').innerHTML=list.filter(function(f){return f.name!=='__ping__'}).map(function(f){" +
+    "return '<tr><td><b>'+f.name+'</b></td><td class=\"price\">'+fmt(f.price)+'</td><td>'+" +
+    "'<button class=\"btn-outline\" onclick=\'editF('+JSON.stringify(f)+')\'>\u0648\u06cc\u0631\u0627\u06cc\u0634</button> '+" +
+    "'<button class=\"btn-danger\" onclick=\"delF(\\''+f.id+'\\')\">\u062d\u0630\u0641</button></td></tr>"}).join('')||'<tr><td colspan=3>\u062e\u0627\u0644\u06cc</td></tr>'}" +
+    "async function saveFood(){var id=foodId.value;var body={name:foodName.value.trim(),price:Number(foodPrice.value)||0,category:foodCat.value.trim(),description:foodDesc.value.trim(),isAvailable:true};" +
+    "if(!body.name)return flash('\u0646\u0627\u0645 \u0644\u0627\u0632\u0645',false);" +
+    "var r=await fetch(API+(id?'/api/menu/'+id:'/api/menu'),{method:id?'PUT':'POST',headers:H(true),body:JSON.stringify(body)});" +
+    "if(!r.ok)return flash('\u062e\u0637\u0627',false);flash('\u0630\u062e\u06cc\u0631\u0647 \u0634\u062f \u2014 \u062f\u0631 \u0647\u0631 \u062f\u0648 \u0627\u067e',true);clearForm();loadMenu()}" +
+    "async function delF(id){if(!confirm('?'))return;await fetch(API+'/api/menu/'+id,{method:'DELETE',headers:H()});loadMenu()}" +
     "</scr"+"ipt></body></html>";
 }
