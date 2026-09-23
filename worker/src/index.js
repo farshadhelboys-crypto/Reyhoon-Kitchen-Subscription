@@ -1,9 +1,5 @@
 /**
- * Reyhoon API
- * - ثبت‌نام آزاد مشتری (بدون ادمین)
- * - سفارش آنلاین
- * - امتیاز پیک
- * - پنل HTML فقط منو/قیمت
+ * Reyhoon API — کد اشتراک فقط رقم (۶ رقمی)
  */
 
 var CORS = {
@@ -57,11 +53,10 @@ function uid() {
   return crypto.randomUUID();
 }
 
+/** کد اشتراک فقط رقم — ۶ رقمی مثل 482917 */
 function genCode() {
-  var chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-  var s = "RH";
-  for (var i = 0; i < 4; i++) s += chars.charAt(Math.floor(Math.random() * chars.length));
-  return s;
+  var n = Math.floor(100000 + Math.random() * 900000);
+  return String(n);
 }
 
 function isAdmin(req, env) {
@@ -92,7 +87,6 @@ async function handleRequest(request) {
       return json({ ok: true, service: "reyhoon-api", ts: Date.now() });
     }
 
-    // ---------- Menu (GET public, write admin) ----------
     if (path === "/api/menu" && request.method === "GET") {
       return json(await load(env, "menu"));
     }
@@ -135,7 +129,6 @@ async function handleRequest(request) {
       return json({ ok: true });
     }
 
-    // ---------- Public self-register (new customer) ----------
     if (path === "/api/customers/register" && request.method === "POST") {
       body = await request.json();
       var name = (body.name || "").trim();
@@ -143,14 +136,12 @@ async function handleRequest(request) {
       if (!name || !phone) return json({ error: "name and phone required" }, 400);
 
       var customers = await load(env, "customers");
-      // if phone exists, return existing
       var existing = customers.find(function (x) { return x.phone === phone; });
       if (existing) {
         return json({ customer: existing, isNew: false, message: "already_registered" });
       }
 
       var code = genCode();
-      // ensure unique code
       while (customers.some(function (x) { return x.subscriptionCode === code; })) {
         code = genCode();
       }
@@ -172,11 +163,12 @@ async function handleRequest(request) {
       return json({ customer: c, isNew: true, message: "registered" }, 201);
     }
 
-    // Kitchen/admin create customer
     if (path === "/api/customers" && request.method === "POST") {
       body = await request.json();
       customers = await load(env, "customers");
-      code = (body.subscriptionCode || "").trim() || genCode();
+      var rawCode = (body.subscriptionCode || "").trim();
+      // فقط رقم؛ اگر خالی یا حروف داشت کد جدید بساز
+      code = /^\d{4,10}$/.test(rawCode) ? rawCode : genCode();
       while (customers.some(function (x) { return x.subscriptionCode === code; })) {
         code = genCode();
       }
@@ -206,7 +198,7 @@ async function handleRequest(request) {
       var q = decodeURIComponent(path.split("/").pop());
       customers = await load(env, "customers");
       c = customers.find(function (x) {
-        return x.subscriptionCode && x.subscriptionCode.toLowerCase() === q.toLowerCase();
+        return x.subscriptionCode && String(x.subscriptionCode) === String(q);
       });
       if (!c) return json({ error: "not found" }, 404);
       return json(c);
@@ -223,7 +215,6 @@ async function handleRequest(request) {
       return json(customers[i]);
     }
 
-    // ---------- Orders ----------
     if (path === "/api/orders" && request.method === "GET") {
       var customerId = url.searchParams.get("customerId");
       var statusFilter = url.searchParams.get("status");
@@ -325,7 +316,6 @@ async function handleRequest(request) {
       return json({ count: list.length, orders: list });
     }
 
-    // ---------- Delivery ratings ----------
     if (path === "/api/ratings" && request.method === "POST") {
       body = await request.json();
       var rating = Number(body.rating) || 0;
@@ -371,10 +361,9 @@ async function handleRequest(request) {
       return json({ ratings: ratings, average: Math.round(avg * 10) / 10, count: ratings.length });
     }
 
-    // Payments (kitchen accounting)
     if (path === "/api/payments" && request.method === "POST") {
       body = await request.json();
-      amount = Number(body.amount) || 0;
+      var amount = Number(body.amount) || 0;
       if (amount <= 0) return json({ error: "invalid amount" }, 400);
       customers = await load(env, "customers");
       ci = customers.findIndex(function (x) { return x.id === body.customerId; });
@@ -382,7 +371,7 @@ async function handleRequest(request) {
 
       var remainingPay = amount;
       orders = await load(env, "orders");
-      open = orders
+      var open = orders
         .map(function (ord, idx) { return { o: ord, idx: idx }; })
         .filter(function (x) {
           return x.o.customerId === body.customerId && x.o.totalAmount - x.o.paidAmount > 0;
@@ -391,7 +380,7 @@ async function handleRequest(request) {
 
       for (var k = 0; k < open.length; k++) {
         if (remainingPay <= 0) break;
-        rem = open[k].o.totalAmount - open[k].o.paidAmount;
+        var rem = open[k].o.totalAmount - open[k].o.paidAmount;
         var pay = Math.min(remainingPay, rem);
         orders[open[k].idx] = Object.assign({}, open[k].o, {
           paidAmount: open[k].o.paidAmount + pay
@@ -410,7 +399,7 @@ async function handleRequest(request) {
       await save(env, "customers", customers);
 
       var payments = await load(env, "payments");
-      p = {
+      var p = {
         id: uid(),
         customerId: body.customerId,
         amount: amount,
@@ -428,7 +417,6 @@ async function handleRequest(request) {
   }
 }
 
-/** پنل فقط منو و قیمت */
 function menuAdminHtml() {
   return "<!DOCTYPE html><html lang=\"fa\" dir=\"rtl\"><head><meta charset=\"utf-8\"/>" +
     "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"/>" +
@@ -448,8 +436,8 @@ function menuAdminHtml() {
     "<header><h1>\u0645\u062f\u06cc\u0631\u06cc\u062a \u0645\u0646\u0648 \u0648 \u0642\u06cc\u0645\u062a \u2014 \u0631\u06cc\u062d\u0648\u0646</h1></header>" +
     "<div class=\"wrap\">" +
     "<div class=\"card\" id=\"loginBox\">" +
-    "<p>\u06a9\u0644\u06cc\u062f \u0627\u062f\u0645\u06cc\u0646 (\u0641\u0642\u0637 \u0628\u0631\u0627\u06cc \u062a\u063a\u06cc\u06cc\u0631 \u0645\u0646\u0648): <b>reyhoon-admin-2024</b></p>" +
-    "<input id=\"adminKey\" type=\"password\" placeholder=\"\u06a9\u0644\u06cc\u062f\"/>" +
+    "<p>\u06a9\u0644\u06cc\u062f: <b>reyhoon-admin-2024</b></p>" +
+    "<input id=\"adminKey\" type=\"password\"/>" +
     "<div style=\"margin-top:10px\"><button class=\"btn\" onclick=\"unlock()\">\u0648\u0631\u0648\u062f</button></div>" +
     "<div id=\"loginMsg\" class=\"msg\"></div></div>" +
     "<div id=\"app\" style=\"display:none\">" +
@@ -457,13 +445,13 @@ function menuAdminHtml() {
     "<div class=\"card\"><h3>\u0627\u0641\u0632\u0648\u062f\u0646 / \u0648\u06cc\u0631\u0627\u06cc\u0634 \u063a\u0630\u0627</h3>" +
     "<input type=\"hidden\" id=\"foodId\"/>" +
     "<div class=\"row\"><div><label>\u0646\u0627\u0645</label><input id=\"foodName\"/></div>" +
-    "<div><label>\u0642\u06cc\u0645\u062a (\u062a\u0648\u0645\u0627\u0646)</label><input id=\"foodPrice\" type=\"number\"/></div></div>" +
+    "<div><label>\u0642\u06cc\u0645\u062a</label><input id=\"foodPrice\" type=\"number\"/></div></div>" +
     "<div class=\"row\"><div><label>\u062f\u0633\u062a\u0647</label><input id=\"foodCat\" value=\"\u0639\u0645\u0648\u0645\u06cc\"/></div>" +
     "<div><label>\u062a\u0648\u0636\u06cc\u062d</label><input id=\"foodDesc\"/></div></div>" +
     "<div style=\"margin-top:12px\" class=\"row\">" +
     "<button class=\"btn\" onclick=\"saveFood()\">\u0630\u062e\u06cc\u0631\u0647</button>" +
     "<button class=\"btn-outline\" onclick=\"clearForm()\">\u067e\u0627\u06a9</button></div></div>" +
-    "<div class=\"card\"><h3>\u0644\u06cc\u0633\u062a \u0645\u0646\u0648 <button class=\"btn-outline\" style=\"float:left\" onclick=\"loadMenu()\">\u0628\u0631\u0648\u0632\u0631\u0633\u0627\u0646\u06cc</button></h3>" +
+    "<div class=\"card\"><h3>\u0644\u06cc\u0633\u062a \u0645\u0646\u0648 <button class=\"btn-outline\" style=\"float:left\" onclick=\"loadMenu()\">\u0628\u0631\u0648\u0632</button></h3>" +
     "<table><thead><tr><th>\u0646\u0627\u0645</th><th>\u0642\u06cc\u0645\u062a</th><th></th></tr></thead><tbody id=\"tb\"></tbody></table>" +
     "</div></div></div>" +
     "<script>" +
@@ -487,7 +475,7 @@ function menuAdminHtml() {
     "async function saveFood(){var id=foodId.value;var body={name:foodName.value.trim(),price:Number(foodPrice.value)||0,category:foodCat.value.trim(),description:foodDesc.value.trim(),isAvailable:true};" +
     "if(!body.name)return flash('\u0646\u0627\u0645 \u0644\u0627\u0632\u0645',false);" +
     "var r=await fetch(API+(id?'/api/menu/'+id:'/api/menu'),{method:id?'PUT':'POST',headers:H(true),body:JSON.stringify(body)});" +
-    "if(!r.ok)return flash('\u062e\u0637\u0627',false);flash('\u0630\u062e\u06cc\u0631\u0647 \u0634\u062f \u2014 \u062f\u0631 \u0647\u0631 \u062f\u0648 \u0627\u067e',true);clearForm();loadMenu()}" +
+    "if(!r.ok)return flash('\u062e\u0637\u0627',false);flash('\u0630\u062e\u06cc\u0631\u0647 \u0634\u062f',true);clearForm();loadMenu()}" +
     "async function delF(id){if(!confirm('?'))return;await fetch(API+'/api/menu/'+id,{method:'DELETE',headers:H()});loadMenu()}" +
     "</scr"+"ipt></body></html>";
 }
