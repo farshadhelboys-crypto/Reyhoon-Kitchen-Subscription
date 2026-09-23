@@ -18,11 +18,21 @@ object Routes {
     const val ADMIN_CUSTOMERS = "admin_customers"
     const val NEW_ORDER = "new_order"
     const val KITCHEN_ORDERS = "kitchen_orders"
+    const val RATINGS = "ratings"
 }
 
 @Composable
-fun ReyhoonNavGraph(modifier: Modifier = Modifier) {
+fun ReyhoonNavGraph(modifier: Modifier = Modifier, openOrders: Boolean = false) {
     val navController = rememberNavController()
+
+    androidx.compose.runtime.LaunchedEffect(openOrders) {
+        if (openOrders) {
+            navController.navigate(Routes.ADMIN) {
+                popUpTo(Routes.ENTER) { inclusive = true }
+            }
+            navController.navigate(Routes.KITCHEN_ORDERS)
+        }
+    }
 
     NavHost(
         navController = navController,
@@ -71,6 +81,7 @@ fun ReyhoonNavGraph(modifier: Modifier = Modifier) {
                 onNavigateToCustomers = { navController.navigate(Routes.ADMIN_CUSTOMERS) },
                 onNavigateToNewOrder = { navController.navigate(Routes.NEW_ORDER) },
                 onNavigateToOrders = { navController.navigate(Routes.KITCHEN_ORDERS) },
+                onNavigateToRatings = { navController.navigate(Routes.RATINGS) },
                 onLogout = {
                     AppRepository.isAdmin.value = false
                     navController.navigate(Routes.ENTER) {
@@ -94,6 +105,10 @@ fun ReyhoonNavGraph(modifier: Modifier = Modifier) {
 
         composable(Routes.KITCHEN_ORDERS) {
             KitchenOrdersScreen(onBack = { navController.popBackStack() })
+        }
+
+        composable(Routes.RATINGS) {
+            RatingsScreen(onBack = { navController.popBackStack() })
         }
     }
 }

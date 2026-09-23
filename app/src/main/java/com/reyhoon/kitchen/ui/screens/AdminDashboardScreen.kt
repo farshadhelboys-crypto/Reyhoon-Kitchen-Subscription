@@ -1,15 +1,6 @@
 package com.reyhoon.kitchen.ui.screens
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -20,33 +11,24 @@ import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.RestaurantMenu
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.reyhoon.kitchen.data.ApiClient
 import com.reyhoon.kitchen.data.ApiConfig
 import com.reyhoon.kitchen.data.AppRepository
 import com.reyhoon.kitchen.ui.components.ReyhoonLogo
 import com.reyhoon.kitchen.ui.theme.GreenMid
 import com.reyhoon.kitchen.ui.theme.OrangeSecondary
+import com.reyhoon.kitchen.util.NotificationHelper
+import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -55,9 +37,11 @@ fun AdminDashboardScreen(
     onNavigateToCustomers: () -> Unit,
     onNavigateToNewOrder: () -> Unit,
     onNavigateToOrders: () -> Unit,
+    onNavigateToRatings: () -> Unit,
     onLogout: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
     var selectedPeriod by remember { mutableStateOf("روزانه") }
     val orderCount = AppRepository.orders.size
     val customerCount = AppRepository.customers.size
@@ -66,6 +50,25 @@ fun AdminDashboardScreen(
     }
     val totalDebt = remember(orderCount, customerCount) { AppRepository.totalCustomerDebt() }
     val totalCredit = remember(orderCount, customerCount) { AppRepository.totalCustomerCredit() }
+    var lastSeenAt by remember { mutableStateOf(System.currentTimeMillis() - 30_000) }
+    var liveAlert by remember { mutableStateOf<String?>(null) }
+
+    // حتی وقتی داخل داشبورد هستید سفارش جدید آلارم می‌دهد
+    LaunchedEffect(Unit) {
+        NotificationHelper.ensureChannels(context)
+        while (true) {
+            if (ApiConfig.isConfigured) {
+                val fresh = ApiClient.fetchNewOrders(lastSeenAt)
+                if (fresh.isNotEmpty()) {
+                    val name = fresh.first().customerName
+                    liveAlert = "سفارش جدید دارید! ${fresh.size} — $name"
+                    NotificationHelper.notifyNewOrder(context, fresh.size, name)
+                    lastSeenAt = maxOf(lastSeenAt, fresh.maxOf { it.createdAt })
+                }
+            }
+            delay(8_000)
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -99,6 +102,19 @@ fun AdminDashboardScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
+            liveAlert?.let { msg ->
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = OrangeSecondary.copy(alpha = 0.2f)),
+                    onClick = onNavigateToOrders
+                ) {
+                    Text(
+                        msg,
+                        modifier = Modifier.padding(12.dp),
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+
             Card(
                 colors = CardDefaults.cardColors(
                     containerColor = if (ApiConfig.isConfigured)
@@ -110,9 +126,9 @@ fun AdminDashboardScreen(
             ) {
                 Text(
                     text = if (ApiConfig.isConfigured)
-                        "آنلاین: ${ApiConfig.baseUrl}"
+                        "آنلاین: ${ApiConfig.baseUrl}\nآلارم سفارش هر ۸ ثانیه فعال است"
                     else
-                        "آدرس Worker خالی است — فایل ApiConfig.kt را پر کنید تا سفارش آنلاین و آلارم فعال شود.",
+                        "آدرس Worker تنظیم نشده",
                     modifier = Modifier.padding(12.dp),
                     fontWeight = FontWeight.SemiBold
                 )
@@ -149,9 +165,10 @@ fun AdminDashboardScreen(
             Spacer(modifier = Modifier.height(8.dp))
             Text("عملیات سریع", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
 
-            AdminActionButton(Icons.Filled.NotificationsActive, "سفارش‌های آنلاین + آلارم", "وضعیت: ثبت / آماده‌سازی / ارسال / تحویل", onNavigateToOrders)
-            AdminActionButton(Icons.Filled.AddShoppingCart, "ثبت سفارش جدید", "سفارش دستی در آشپزخانه", onNavigateToNewOrder)
-            AdminActionButton(Icons.Filled.RestaurantMenu, "مدیریت منوی محلی", "همگام با پنل HTML سرور", onNavigateToMenuManage)
+            AdminActionButton(Icons.Filled.NotificationsActive, "سفارش‌های آنلاین + آلارم", "نوتیف و صدا هنگام سفارش جدید", onNavigateToOrders)
+            AdminActionButton(Icons.Filled.RestaurantMenu, "مدیریت منو (همگام با سرور)", "افزودن/ویرایش/حذف — اپ مشتری به‌روز می‌شود", onNavigateToMenuManage)
+            AdminActionButton(Icons.Filled.Star, "امتیازات پیک", "امتیازهایی که مشتری بعد از تحویل می‌دهد", onNavigateToRatings)
+            AdminActionButton(Icons.Filled.AddShoppingCart, "ثبت سفارش جدید", "سفارش تلفنی / حضوری", onNavigateToNewOrder)
             AdminActionButton(Icons.Filled.People, "مشتریان و بدهی", "افزودن مشتری و تسویه", onNavigateToCustomers)
         }
     }
