@@ -49,7 +49,10 @@ fun HomeScreen(
         modifier = modifier
     ) { padding ->
         if (customer == null) {
-            Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
+            Box(
+                modifier = Modifier.fillMaxSize().padding(padding),
+                contentAlignment = Alignment.Center
+            ) {
                 Text("لطفاً دوباره وارد شوید")
             }
             return@Scaffold
@@ -63,19 +66,18 @@ fun HomeScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            // Welcome
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(18.dp),
                 colors = CardDefaults.cardColors(containerColor = GreenPrimary.copy(alpha = 0.12f))
             ) {
-                Column(Modifier = Modifier.padding(20.dp)) {
+                Column(modifier = Modifier.padding(20.dp)) {
                     Text(
                         text = "سلام ${customer!!.name} عزیز 👋",
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold
                     )
-                    Spacer(Modifier = Modifier.height(4.dp))
+                    Spacer(modifier = Modifier.height(4.dp))
                     Text(
                         text = if (customer!!.debt > 0)
                             "بدهی فعلی: ${AppRepository.formatPrice(customer!!.debt)} تومان"
@@ -87,7 +89,6 @@ fun HomeScreen(
                 }
             }
 
-            // Address card
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(16.dp),
@@ -98,8 +99,8 @@ fun HomeScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Icon(Icons.Default.LocationOn, null, tint = OrangeSecondary, modifier = Modifier.size(28.dp))
-                    Spacer(Modifier = Modifier.width(12.dp))
-                    Column(Modifier = Modifier.weight(1f)) {
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
                         Text("آدرس تحویل", fontWeight = FontWeight.SemiBold)
                         Text(
                             customer!!.address.fullAddress(),
@@ -111,14 +112,13 @@ fun HomeScreen(
                 }
             }
 
-            // Quick actions
             Button(
                 onClick = onNavigateToMenu,
                 modifier = Modifier.fillMaxWidth().height(54.dp),
                 shape = RoundedCornerShape(14.dp)
             ) {
                 Icon(Icons.Default.RestaurantMenu, null)
-                Spacer(Modifier = Modifier.width(8.dp))
+                Spacer(modifier = Modifier.width(8.dp))
                 Text("مشاهده منوی غذا", fontWeight = FontWeight.Medium)
             }
 
@@ -128,24 +128,23 @@ fun HomeScreen(
                 shape = RoundedCornerShape(14.dp)
             ) {
                 Icon(Icons.Default.EditLocation, null)
-                Spacer(Modifier = Modifier.width(8.dp))
+                Spacer(modifier = Modifier.width(8.dp))
                 Text("ویرایش آدرس")
             }
 
-            // Debt info
             if (customer!!.debt > 0) {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(16.dp),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.4f))
                 ) {
-                    Column(Modifier = Modifier.padding(18.dp)) {
+                    Column(modifier = Modifier.padding(18.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Default.AccountBalanceWallet, null, tint = MaterialTheme.colorScheme.error)
-                            Spacer(Modifier = Modifier.width(8.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
                             Text("وضعیت بدهی", fontWeight = FontWeight.SemiBold)
                         }
-                        Spacer(Modifier = Modifier.height(8.dp))
+                        Spacer(modifier = Modifier.height(8.dp))
                         Text(
                             "مبلغ باقی‌مانده: ${AppRepository.formatPrice(customer!!.debt)} تومان",
                             style = MaterialTheme.typography.titleMedium,

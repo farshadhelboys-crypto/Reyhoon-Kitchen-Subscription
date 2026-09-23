@@ -11,6 +11,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.reyhoon.kitchen.data.AppRepository
@@ -60,7 +62,6 @@ fun AdminDashboardScreen(
         ) {
             Text("گزارش فروش", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
 
-            // Period chips
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 listOf("روزانه", "هفتگی", "ماهانه").forEach { period ->
                     FilterChip(
@@ -71,8 +72,10 @@ fun AdminDashboardScreen(
                 }
             }
 
-            // Sales cards
-            Row(Modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
                 StatCard(
                     title = "فروش کل",
                     value = AppRepository.formatPrice(summary.totalSales),
@@ -89,7 +92,10 @@ fun AdminDashboardScreen(
                 )
             }
 
-            Row(Modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
                 StatCard(
                     title = "بدهی دوره",
                     value = AppRepository.formatPrice(summary.totalDebt),
@@ -137,14 +143,14 @@ private fun StatCard(
     value: String,
     subtitle: String,
     modifier: Modifier = Modifier,
-    color: androidx.compose.ui.graphics.Color
+    color: Color
 ) {
     Card(
         modifier = modifier,
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = color.copy(alpha = 0.12f))
     ) {
-        Column(Modifier = Modifier.padding(14.dp)) {
+        Column(modifier = Modifier.padding(14.dp)) {
             Text(title, style = MaterialTheme.typography.labelMedium, color = color)
             Spacer(modifier = Modifier.height(4.dp))
             Text(value, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
@@ -155,7 +161,7 @@ private fun StatCard(
 
 @Composable
 private fun AdminActionButton(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    icon: ImageVector,
     title: String,
     subtitle: String,
     onClick: () -> Unit

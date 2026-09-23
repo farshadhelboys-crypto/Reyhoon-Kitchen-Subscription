@@ -55,7 +55,10 @@ fun AdminCustomersScreen(
         modifier = modifier
     ) { padding ->
         if (customers.isEmpty()) {
-            Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
+            Box(
+                modifier = Modifier.fillMaxSize().padding(padding),
+                contentAlignment = Alignment.Center
+            ) {
                 Text("مشتری‌ای ثبت نشده. با + اضافه کنید.", color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
             }
         } else {
@@ -66,7 +69,7 @@ fun AdminCustomersScreen(
             ) {
                 items(customers, key = { it.id }) { c ->
                     Card(shape = RoundedCornerShape(12.dp)) {
-                        Column(Modifier = Modifier.padding(14.dp)) {
+                        Column(modifier = Modifier.padding(14.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(c.name, fontWeight = FontWeight.SemiBold)
@@ -74,7 +77,11 @@ fun AdminCustomersScreen(
                                     if (!c.subscriptionCode.isNullOrBlank()) {
                                         Text("کد: ${c.subscriptionCode}", style = MaterialTheme.typography.bodySmall, color = GreenPrimary)
                                     }
-                                    Text(c.address.fullAddress(), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
+                                    Text(
+                                        c.address.fullAddress(),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                                    )
                                 }
                                 IconButton(onClick = { AppRepository.deleteCustomer(c.id) }) {
                                     Icon(Icons.Default.Delete, null, tint = MaterialTheme.colorScheme.error)
