@@ -14,34 +14,39 @@ import androidx.core.view.WindowCompat
 
 private val LightColorScheme = lightColorScheme(
     primary = GreenMid,
-    onPrimary = SurfaceWhite,
+    onPrimary = Color.White,
     primaryContainer = GreenPale,
-    onPrimaryContainer = GreenDark,
+    onPrimaryContainer = Color(0xFF0A0A0A),
     secondary = OrangeSecondary,
-    onSecondary = SurfaceWhite,
+    onSecondary = Color.White,
     secondaryContainer = Cream,
-    onSecondaryContainer = Color(0xFF5D4037),
+    onSecondaryContainer = Color(0xFF1A1A1A),
     tertiary = AmberAccent,
+    onTertiary = Color(0xFF1A1A1A),
     background = BackgroundLight,
     surface = SurfaceCard,
-    onBackground = TextPrimary,
-    onSurface = TextPrimary,
-    onSurfaceVariant = TextSecondary,
+    onBackground = Color(0xFF0A0A0A),
+    onSurface = Color(0xFF0A0A0A),
+    onSurfaceVariant = Color(0xFF1B2E1C),
     error = ErrorRed,
-    outline = GreenLight.copy(alpha = 0.5f)
+    onError = Color.White,
+    outline = Color(0xFF3D5C40)
 )
 
 private val DarkColorScheme = darkColorScheme(
     primary = GreenLight,
-    onPrimary = GreenDark,
+    onPrimary = Color(0xFF0A0A0A),
     primaryContainer = GreenPrimary,
+    onPrimaryContainer = Color.White,
     secondary = OrangeLight,
-    onSecondary = Color(0xFF3E2723),
-    background = Color(0xFF121A12),
-    surface = Color(0xFF1B241B),
-    onBackground = Color(0xFFE8F5E9),
-    onSurface = Color(0xFFE8F5E9),
-    error = Color(0xFFEF9A9A)
+    onSecondary = Color(0xFF0A0A0A),
+    background = Color(0xFF0E140E),
+    surface = Color(0xFF1A221A),
+    onBackground = Color(0xFFF5F5F5),
+    onSurface = Color(0xFFF5F5F5),
+    onSurfaceVariant = Color(0xFFE0E0E0),
+    error = Color(0xFFFF8A80),
+    onError = Color(0xFF0A0A0A)
 )
 
 @Composable
