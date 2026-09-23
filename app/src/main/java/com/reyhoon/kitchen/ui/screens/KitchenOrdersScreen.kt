@@ -6,7 +6,17 @@ import android.os.Build
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -14,10 +24,30 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.AssistChip
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
+import androidx.compose.ui.Modifier.modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -36,10 +66,7 @@ import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun KitchenOrdersScreen(
-    onBack: () -> Unit,
-    modifier: Modifier = Modifier
-) {
+fun KitchenOrdersScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var orders by remember { mutableStateOf<List<Order>>(emptyList()) }
@@ -121,22 +148,13 @@ fun KitchenOrdersScreen(
         },
         modifier = modifier
     ) { padding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-        ) {
+        Column(modifier = Modifier.fillMaxSize().padding(padding)) {
             alertText?.let { msg ->
                 Card(
                     colors = CardDefaults.cardColors(containerColor = OrangeSecondary.copy(alpha = 0.2f)),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(12.dp)
+                    modifier = Modifier.fillMaxWidth().padding(12.dp)
                 ) {
-                    Row(
-                        modifier = Modifier.padding(12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
+                    Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Default.NotificationsActive, null, tint = OrangeSecondary)
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(msg, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
@@ -144,39 +162,25 @@ fun KitchenOrdersScreen(
                     }
                 }
             }
-
             if (loading && orders.isEmpty()) {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator()
                 }
             } else if (orders.isEmpty()) {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Text("سفارشی نیست", style = MaterialTheme.typography.titleMedium)
                 }
             } else {
-                LazyColumn(
-                    contentPadding = PaddingValues(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
+                LazyColumn(contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     items(orders, key = { it.id }) { order ->
-                        OrderCard(
-                            order = order,
-                            formatTs = ::formatTs,
-                            onStatus = { status ->
-                                scope.launch {
-                                    if (ApiConfig.isConfigured) {
-                                        ApiClient.updateOrderStatus(order.id, status, byKitchen = true)
-                                        orders = ApiClient.fetchOrders()
-                                    }
+                        OrderCard(order, ::formatTs) { status ->
+                            scope.launch {
+                                if (ApiConfig.isConfigured) {
+                                    ApiClient.updateOrderStatus(order.id, status, byKitchen = true)
+                                    orders = ApiClient.fetchOrders()
                                 }
                             }
-                        )
+                        }
                     }
                 }
             }
@@ -185,62 +189,39 @@ fun KitchenOrdersScreen(
 }
 
 @Composable
-private fun OrderCard(
-    order: Order,
-    formatTs: (Long?) -> String,
-    onStatus: (String) -> Unit
-) {
+private fun OrderCard(order: Order, formatTs: (Long?) -> String, onStatus: (String) -> Unit) {
     Card(shape = RoundedCornerShape(14.dp)) {
         Column(modifier = Modifier.padding(14.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(order.customerName, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-                AssistChip(
-                    onClick = {},
-                    label = { Text(order.statusEnum.labelFa) }
-                )
+                AssistChip(onClick = {}, label = { Text(order.statusEnum.labelFa) })
             }
             if (order.customerPhone.isNotBlank()) {
                 Text("تلفن: ${order.customerPhone}", style = MaterialTheme.typography.bodyMedium)
             }
             Text("ساعت ثبت: ${formatTs(order.createdAt)}", style = MaterialTheme.typography.bodyMedium)
             if (order.deliveredAt != null) {
-                Text(
-                    "ساعت تحویل: ${formatTs(order.deliveredAt)}",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = GreenMid
-                )
+                Text("ساعت تحویل: ${formatTs(order.deliveredAt)}", style = MaterialTheme.typography.bodyMedium, color = GreenMid)
             }
             Spacer(modifier = Modifier.height(6.dp))
-            order.items.forEach { item ->
-                Text("• ${item.foodName} × ${item.quantity}")
-            }
-            Text(
-                "مبلغ: ${AppRepository.formatPrice(order.totalAmount)} تومان",
-                fontWeight = FontWeight.Bold,
-                color = OrangeSecondary
-            )
+            order.items.forEach { item -> Text("• ${item.foodName} × ${item.quantity}") }
+            Text("مبلغ: ${AppRepository.formatPrice(order.totalAmount)} تومان", fontWeight = FontWeight.Bold, color = OrangeSecondary)
             Spacer(modifier = Modifier.height(8.dp))
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                modifier = Modifier.fillMaxWidth()
-            ) {
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
                 if (order.status == OrderStatus.REGISTERED.key) {
-                    FilledTonalButton(
-                        onClick = { onStatus(OrderStatus.PREPARING.key) },
-                        modifier = Modifier.weight(1f)
-                    ) { Text("آماده‌سازی") }
+                    FilledTonalButton(onClick = { onStatus(OrderStatus.PREPARING.key) }, modifier = Modifier.weight(1f)) {
+                        Text("آماده‌سازی")
+                    }
                 }
                 if (order.status == OrderStatus.PREPARING.key || order.status == OrderStatus.REGISTERED.key) {
-                    FilledTonalButton(
-                        onClick = { onStatus(OrderStatus.SHIPPED.key) },
-                        modifier = Modifier.weight(1f)
-                    ) { Text("ارسال") }
+                    FilledTonalButton(onClick = { onStatus(OrderStatus.SHIPPED.key) }, modifier = Modifier.weight(1f)) {
+                        Text("ارسال")
+                    }
                 }
                 if (order.status != OrderStatus.DELIVERED.key) {
-                    Button(
-                        onClick = { onStatus(OrderStatus.DELIVERED.key) },
-                        modifier = Modifier.weight(1f)
-                    ) { Text("تحویل شد") }
+                    Button(onClick = { onStatus(OrderStatus.DELIVERED.key) }, modifier = Modifier.weight(1f)) {
+                        Text("تحویل شد")
+                    }
                 }
             }
         }
