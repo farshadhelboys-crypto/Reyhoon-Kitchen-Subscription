@@ -47,27 +47,23 @@ jobs:
           chmod +x gradlew
 
       - name: Build Kitchen APK
-        run: |
-          ./gradlew :app:assembleDebug --stacktrace --no-daemon
+        run: ./gradlew :app:assembleDebug --stacktrace --no-daemon
 
       - name: Build Customer APK
-        run: |
-          ./gradlew :customer:assembleDebug --stacktrace --no-daemon
-        continue-on-error: true
+        run: ./gradlew :customer:assembleDebug --stacktrace --no-daemon
 
       - name: Upload Kitchen APK
         uses: actions/upload-artifact@v4
-        if: success()
         with:
           name: reyhoon-kitchen-apk
           path: app/build/outputs/apk/debug/*.apk
           retention-days: 30
+          if-no-files-found: error
 
       - name: Upload Customer APK
         uses: actions/upload-artifact@v4
-        if: success()
         with:
           name: reyhoon-customer-apk
           path: customer/build/outputs/apk/debug/*.apk
           retention-days: 30
-          if-no-files-found: ignore
+          if-no-files-found: error

@@ -5,7 +5,18 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -17,8 +28,33 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Star
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.lightColorScheme
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -177,8 +213,14 @@ fun ExistingLogin(onLoggedIn: (Customer) -> Unit, onBack: () -> Unit) {
         enabled = code.isNotBlank() && !loading,
         modifier = Modifier.fillMaxWidth().height(50.dp)
     ) {
-        if (loading) CircularProgressIndicator(Modifier = Modifier.size(22.dp), color = Color.White, strokeWidth = 2.dp)
-        else Text("ورود", fontWeight = FontWeight.Bold)
+        if (loading) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(22.dp),
+                color = Color.White
+            )
+        } else {
+            Text("ورود", fontWeight = FontWeight.Bold)
+        }
     }
     TextButton(onClick = onBack) { Text("بازگشت") }
 }
@@ -214,8 +256,14 @@ fun NewRegister(onRegistered: (Customer) -> Unit, onBack: () -> Unit) {
         enabled = name.isNotBlank() && phone.length >= 10 && !loading,
         modifier = Modifier.fillMaxWidth().height(50.dp)
     ) {
-        if (loading) CircularProgressIndicator(modifier = Modifier.size(22.dp), color = Color.White, strokeWidth = 2.dp)
-        else Text("ثبت و ورود", fontWeight = FontWeight.Bold)
+        if (loading) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(22.dp),
+                color = Color.White
+            )
+        } else {
+            Text("ثبت و ورود", fontWeight = FontWeight.Bold)
+        }
     }
     TextButton(onClick = onBack) { Text("بازگشت") }
 }
@@ -282,23 +330,34 @@ fun MenuOrderTab(customer: Customer) {
     Column(modifier = Modifier.fillMaxSize().padding(12.dp)) {
         Text("آدرس: ${customer.address.full()}", fontWeight = FontWeight.SemiBold)
         if (customer.credit > 0) {
-            Text("اعتبار: ${fmt(customer.credit)} تومان از سفارش کسر می‌شود", color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold)
+            Text(
+                "اعتبار: ${fmt(customer.credit)} تومان از سفارش کسر می‌شود",
+                color = Color(0xFF2E7D32),
+                fontWeight = FontWeight.Bold
+            )
         }
         Spacer(modifier = Modifier.height(8.dp))
         LazyColumn(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(menu, key = { it.id }) { f ->
                 Card(shape = RoundedCornerShape(12.dp)) {
-                    Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text(f.name, fontWeight = FontWeight.Bold)
                             Text("${fmt(f.price)} تومان", color = Color(0xFFE65100), fontWeight = FontWeight.Bold)
                         }
                         IconButton(onClick = {
-                            qty = qty.toMutableMap().apply { put(f.id, ((qty[f.id] ?: 0) - 1).coerceAtLeast(0)) }
+                            qty = qty.toMutableMap().apply {
+                                put(f.id, ((qty[f.id] ?: 0) - 1).coerceAtLeast(0))
+                            }
                         }) { Icon(Icons.Filled.Remove, null) }
                         Text("${qty[f.id] ?: 0}", fontWeight = FontWeight.Bold)
                         IconButton(onClick = {
-                            qty = qty.toMutableMap().apply { put(f.id, (qty[f.id] ?: 0) + 1) }
+                            qty = qty.toMutableMap().apply {
+                                put(f.id, (qty[f.id] ?: 0) + 1)
+                            }
                         }) { Icon(Icons.Filled.Add, null) }
                     }
                 }
@@ -334,11 +393,14 @@ fun OrdersTab(customer: Customer) {
         }
     }
 
-    fun ts(t: Long?) =
+    fun ts(t: Long?): String =
         if (t == null || t <= 0) "—"
         else SimpleDateFormat("yyyy/MM/dd HH:mm", Locale("fa")).format(Date(t))
 
-    LazyColumn(contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    LazyColumn(
+        contentPadding = PaddingValues(12.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
         item {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("سفارش‌های من", fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
@@ -354,7 +416,11 @@ fun OrdersTab(customer: Customer) {
                     Text("ثبت: ${ts(o.createdAt)}")
                     if (o.deliveredAt != null) Text("تحویل: ${ts(o.deliveredAt)}")
                     o.items.forEach { Text("• ${it.foodName} × ${it.quantity}") }
-                    Text("${fmt(o.totalAmount)} تومان", fontWeight = FontWeight.Bold, color = Color(0xFFE65100))
+                    Text(
+                        "${fmt(o.totalAmount)} تومان",
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFFE65100)
+                    )
                     if (o.status != "delivered") {
                         Spacer(modifier = Modifier.height(8.dp))
                         Button(
@@ -405,7 +471,10 @@ fun RateDialog(onDismiss: () -> Unit, onSubmit: (Int, String) -> Unit) {
         title = { Text("به پیک چه امتیازی می‌دهید؟", fontWeight = FontWeight.Bold) },
         text = {
             Column {
-                Row(horizontalArrangement = Arrangement.Center, modifier = Modifier.fillMaxWidth()) {
+                Row(
+                    horizontalArrangement = Arrangement.Center,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
                     (1..5).forEach { n ->
                         IconButton(onClick = { stars = n }) {
                             Icon(
@@ -434,4 +503,4 @@ fun RateDialog(onDismiss: () -> Unit, onSubmit: (Int, String) -> Unit) {
     )
 }
 
-private fun fmt(n: Long) = "%,d".format(n).replace(',', '٬')
+private fun fmt(n: Long): String = "%,d".format(n).replace(',', '٬')
