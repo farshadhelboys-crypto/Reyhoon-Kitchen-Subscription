@@ -9,7 +9,7 @@ on:
 
 jobs:
   build:
-    name: Build Debug APK
+    name: Build Debug APKs
     runs-on: ubuntu-latest
 
     steps:
@@ -30,7 +30,6 @@ jobs:
 
       - name: Create Gradle Wrapper
         run: |
-          # Ensure wrapper properties exist
           mkdir -p gradle/wrapper
           cat > gradle/wrapper/gradle-wrapper.properties << 'EOF'
           distributionBase=GRADLE_USER_HOME
@@ -41,29 +40,28 @@ jobs:
           zipStoreBase=GRADLE_USER_HOME
           zipStorePath=wrapper/dists
           EOF
-
-          # Download official gradle-wrapper.jar
           curl -sL -o gradle/wrapper/gradle-wrapper.jar \
             https://raw.githubusercontent.com/gradle/gradle/v8.7.0/gradle/wrapper/gradle-wrapper.jar
-
-          # Official gradlew script
           curl -sL -o gradlew \
             https://raw.githubusercontent.com/gradle/gradle/v8.7.0/gradlew
           chmod +x gradlew
 
-          # Also get gradlew.bat for completeness (optional)
-          curl -sL -o gradlew.bat \
-            https://raw.githubusercontent.com/gradle/gradle/v8.7.0/gradlew.bat || true
-
-      - name: Build Debug APK
+      - name: Build Kitchen + Customer Debug APKs
         run: |
-          ./gradlew assembleDebug --stacktrace --no-daemon
+          ./gradlew :app:assembleDebug :customer:assembleDebug --stacktrace --no-daemon
 
-      - name: Upload APK Artifact
+      - name: Upload Kitchen APK
         uses: actions/upload-artifact@v4
         if: success()
         with:
-          name: reyhoon-debug-apk
+          name: reyhoon-kitchen-apk
           path: app/build/outputs/apk/debug/*.apk
           retention-days: 30
-          if-no-files-found: error
+
+      - name: Upload Customer APK
+        uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: reyhoon-customer-apk
+          path: customer/build/outputs/apk/debug/*.apk
+          retention-days: 30
