@@ -8,16 +8,21 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.reyhoon.kitchen.data.ApiClient
+import com.reyhoon.kitchen.data.ApiConfig
 import com.reyhoon.kitchen.data.AppRepository
 import com.reyhoon.kitchen.data.FoodItem
 import com.reyhoon.kitchen.ui.theme.GreenPrimary
 import com.reyhoon.kitchen.ui.theme.OrangeSecondary
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -25,59 +30,130 @@ fun AdminMenuScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    var showAddDialog by remember { mutableStateOf(false) }
-    val items = AppRepository.menuItems
+    var items by remember { mutableStateOf<List<FoodItem>>(emptyList()) }
+    var loading by remember { mutableStateOf(false) }
+    var message by remember { mutableStateOf<String?>(null) }
+    var showDialog by remember { mutableStateOf(false) }
+    var editing by remember { mutableStateOf<FoodItem?>(null) }
+    val scope = rememberCoroutineScope()
+
+    suspend fun refresh() {
+        loading = true
+        if (ApiConfig.isConfigured) {
+            val remote = ApiClient.fetchMenu()
+            items = remote
+            AppRepository.menuItems.clear()
+            AppRepository.menuItems.addAll(remote)
+            message = "همگام با سرور — ${remote.size} غذا"
+        } else {
+            items = AppRepository.menuItems.toList()
+            message = "آفلاین — فقط محلی"
+        }
+        loading = false
+    }
+
+    LaunchedEffect(Unit) { refresh() }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("مدیریت منو", fontWeight = FontWeight.Bold) },
+                title = {
+                    Column {
+                        Text("مدیریت منو", fontWeight = FontWeight.Bold)
+                        Text(
+                            if (ApiConfig.isConfigured) "ذخیره روی سرور → اپ مشتری"
+                            else "حالت محلی",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, "بازگشت")
                     }
                 },
+                actions = {
+                    IconButton(onClick = { scope.launch { refresh() } }) {
+                        Icon(Icons.Default.Refresh, "بروزرسانی")
+                    }
+                },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = GreenPrimary,
                     titleContentColor = MaterialTheme.colorScheme.onPrimary,
-                    navigationIconContentColor = MaterialTheme.colorScheme.onPrimary
+                    navigationIconContentColor = MaterialTheme.colorScheme.onPrimary,
+                    actionIconContentColor = MaterialTheme.colorScheme.onPrimary
                 )
             )
         },
         floatingActionButton = {
-            FloatingActionButton(onClick = { showAddDialog = true }, containerColor = GreenPrimary) {
+            FloatingActionButton(
+                onClick = { editing = null; showDialog = true },
+                containerColor = GreenPrimary
+            ) {
                 Icon(Icons.Default.Add, "افزودن", tint = MaterialTheme.colorScheme.onPrimary)
             }
         },
         modifier = modifier
     ) { padding ->
-        if (items.isEmpty()) {
-            Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
-                Text("هنوز غذایی ثبت نشده. با + اضافه کنید.", color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+        Column(modifier = Modifier.fillMaxSize().padding(padding)) {
+            message?.let {
+                Text(
+                    it,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                    fontWeight = FontWeight.SemiBold,
+                    color = GreenPrimary
+                )
             }
-        } else {
-            LazyColumn(
-                contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-                modifier = Modifier.padding(padding)
-            ) {
-                items(items, key = { it.id }) { item ->
-                    Card(shape = RoundedCornerShape(12.dp)) {
-                        Row(
-                            modifier = Modifier.padding(14.dp).fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(item.name, fontWeight = FontWeight.SemiBold)
-                                Text(item.category, style = MaterialTheme.typography.bodySmall)
-                                Text(
-                                    "${AppRepository.formatPrice(item.price)} تومان",
-                                    color = OrangeSecondary,
-                                    fontWeight = FontWeight.Medium
-                                )
-                            }
-                            IconButton(onClick = { AppRepository.deleteFood(item.id) }) {
-                                Icon(Icons.Default.Delete, "حذف", tint = MaterialTheme.colorScheme.error)
+            if (loading && items.isEmpty()) {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator()
+                }
+            } else if (items.isEmpty()) {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text("هنوز غذایی نیست. با + اضافه کنید.")
+                }
+            } else {
+                LazyColumn(
+                    contentPadding = PaddingValues(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    items(items, key = { it.id }) { item ->
+                        Card(shape = RoundedCornerShape(12.dp)) {
+                            Row(
+                                modifier = Modifier.padding(14.dp).fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(item.name, fontWeight = FontWeight.SemiBold)
+                                    Text(item.category, style = MaterialTheme.typography.bodySmall)
+                                    Text(
+                                        "${AppRepository.formatPrice(item.price)} تومان",
+                                        color = OrangeSecondary,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                }
+                                IconButton(onClick = {
+                                    editing = item
+                                    showDialog = true
+                                }) {
+                                    Icon(Icons.Default.Edit, "ویرایش")
+                                }
+                                IconButton(onClick = {
+                                    scope.launch {
+                                        loading = true
+                                        val ok = if (ApiConfig.isConfigured) {
+                                            ApiClient.deleteMenuItem(item.id)
+                                        } else {
+                                            AppRepository.deleteFood(item.id)
+                                            true
+                                        }
+                                        if (ok) refresh()
+                                        else message = "حذف ناموفق"
+                                        loading = false
+                                    }
+                                }) {
+                                    Icon(Icons.Default.Delete, "حذف", tint = MaterialTheme.colorScheme.error)
+                                }
                             }
                         }
                     }
@@ -86,31 +162,63 @@ fun AdminMenuScreen(
         }
     }
 
-    if (showAddDialog) {
-        AddFoodDialog(
-            onDismiss = { showAddDialog = false },
+    if (showDialog) {
+        FoodEditDialog(
+            initial = editing,
+            onDismiss = { showDialog = false },
             onSave = { food ->
-                AppRepository.addFood(food)
-                showAddDialog = false
+                scope.launch {
+                    loading = true
+                    val result = if (ApiConfig.isConfigured) {
+                        if (editing != null) ApiClient.updateMenuItem(food)
+                        else ApiClient.createMenuItem(food)
+                    } else {
+                        if (editing != null) {
+                            AppRepository.updateFood(food)
+                            food
+                        } else {
+                            AppRepository.addFood(food)
+                            food
+                        }
+                    }
+                    if (result != null) {
+                        message = if (editing != null) "ویرایش شد و در اپ مشتری اعمال می‌شود"
+                        else "ذخیره شد — مشتری منو را می‌بیند"
+                        showDialog = false
+                        refresh()
+                    } else {
+                        message = "خطا در ذخیره روی سرور"
+                    }
+                    loading = false
+                }
             }
         )
     }
 }
 
 @Composable
-private fun AddFoodDialog(onDismiss: () -> Unit, onSave: (FoodItem) -> Unit) {
-    var name by remember { mutableStateOf("") }
-    var price by remember { mutableStateOf("") }
-    var category by remember { mutableStateOf("عمومی") }
-    var desc by remember { mutableStateOf("") }
+private fun FoodEditDialog(
+    initial: FoodItem?,
+    onDismiss: () -> Unit,
+    onSave: (FoodItem) -> Unit
+) {
+    var name by remember { mutableStateOf(initial?.name ?: "") }
+    var price by remember { mutableStateOf(initial?.price?.toString() ?: "") }
+    var category by remember { mutableStateOf(initial?.category ?: "عمومی") }
+    var desc by remember { mutableStateOf(initial?.description ?: "") }
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("افزودن غذا") },
+        title = { Text(if (initial == null) "افزودن غذا" else "ویرایش غذا") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("نام غذا") }, singleLine = true)
-                OutlinedTextField(value = price, onValueChange = { price = it.filter { c -> c.isDigit() } }, label = { Text("قیمت (تومان)") }, singleLine = true)
+                OutlinedTextField(
+                    value = price,
+                    onValueChange = { price = it.filter { c -> c.isDigit() } },
+                    label = { Text("قیمت (تومان)") },
+                    singleLine = true
+                )
                 OutlinedTextField(value = category, onValueChange = { category = it }, label = { Text("دسته") }, singleLine = true)
                 OutlinedTextField(value = desc, onValueChange = { desc = it }, label = { Text("توضیحات") }, maxLines = 2)
             }
@@ -120,7 +228,15 @@ private fun AddFoodDialog(onDismiss: () -> Unit, onSave: (FoodItem) -> Unit) {
                 onClick = {
                     val p = price.toLongOrNull() ?: 0L
                     if (name.isNotBlank() && p > 0) {
-                        onSave(FoodItem(name = name.trim(), description = desc.trim(), price = p, category = category.trim().ifBlank { "عمومی" }))
+                        onSave(
+                            FoodItem(
+                                id = initial?.id ?: java.util.UUID.randomUUID().toString(),
+                                name = name.trim(),
+                                description = desc.trim(),
+                                price = p,
+                                category = category.trim().ifBlank { "عمومی" }
+                            )
+                        )
                     }
                 },
                 enabled = name.isNotBlank() && (price.toLongOrNull() ?: 0) > 0
