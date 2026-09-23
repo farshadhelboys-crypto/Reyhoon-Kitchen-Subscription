@@ -19,67 +19,60 @@ import com.reyhoon.kitchen.R
 
 object NotificationHelper {
 
-    private const val CHANNEL_ORDERS = "reyhoon_new_orders_v2"
-    private const val CHANNEL_STATUS = "reyhoon_status_v2"
+    private const val CHANNEL_ORDERS = "reyhoon_new_orders_v3"
+    private const val CHANNEL_STATUS = "reyhoon_status_v3"
     const val NEW_ORDER_NOTIF_ID = 71001
 
     @Volatile
     private var activeRingtone: Ringtone? = null
 
-    /** سفارش‌هایی که قبلاً آلارم شده‌اند — جلوگیری از تکرار */
-    private val alertedOrderIds = mutableSetOf<String>()
+    /** تا وقتی کاربر صفحه سفارش آنلاین را باز نکند true می‌ماند */
+    @Volatile
+    var pendingAlarm: Boolean = false
+        private set
+
+    private val knownOrderIds = mutableSetOf<String>()
 
     fun ensureChannels(context: Context) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
         val nm = context.getSystemService(NotificationManager::class.java) ?: return
-
         val soundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
         val attrs = AudioAttributes.Builder()
             .setUsage(AudioAttributes.USAGE_NOTIFICATION)
             .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
             .build()
 
-        val orders = NotificationChannel(
-            CHANNEL_ORDERS,
-            "سفارش جدید ریحون",
-            NotificationManager.IMPORTANCE_HIGH
-        ).apply {
-            description = "اعلان سفارش جدید از مشتری"
-            enableVibration(true)
-            vibrationPattern = longArrayOf(0, 350, 150, 350)
-            setSound(soundUri, attrs)
-            enableLights(true)
-        }
-
-        val status = NotificationChannel(
-            CHANNEL_STATUS,
-            "وضعیت سفارش",
-            NotificationManager.IMPORTANCE_DEFAULT
-        ).apply {
-            description = "به‌روزرسانی وضعیت سفارش"
-            enableVibration(true)
-        }
-
-        nm.createNotificationChannel(orders)
-        nm.createNotificationChannel(status)
+        nm.createNotificationChannel(
+            NotificationChannel(CHANNEL_ORDERS, "سفارش جدید ریحون", NotificationManager.IMPORTANCE_HIGH).apply {
+                description = "تا باز کردن سفارش آنلاین ادامه دارد"
+                enableVibration(true)
+                vibrationPattern = longArrayOf(0, 400, 200, 400)
+                setSound(soundUri, attrs)
+            }
+        )
+        nm.createNotificationChannel(
+            NotificationChannel(CHANNEL_STATUS, "وضعیت سفارش", NotificationManager.IMPORTANCE_DEFAULT)
+        )
     }
 
     /**
-     * فقط برای سفارش‌های جدید (id ندیده‌شده) نوتیف می‌فرستد.
-     * @return تعداد سفارش تازه‌ای که آلارم شد
+     * سفارش‌های تازه را ثبت می‌کند و آلارم را روشن نگه می‌دارد
+     * تا وقتی [acknowledgeOrdersViewed] صدا شود.
      */
-    fun notifyNewOrders(context: Context, orderIds: List<String>, customerName: String = ""): Int {
-        val fresh = orderIds.filter { it.isNotBlank() && it !in alertedOrderIds }
-        if (fresh.isEmpty()) return 0
-        alertedOrderIds.addAll(fresh)
+    fun onNewOrdersDetected(context: Context, orderIds: List<String>, customerName: String = ""): Int {
+        val fresh = orderIds.filter { it.isNotBlank() && it !in knownOrderIds }
+        if (fresh.isEmpty() && !pendingAlarm) return 0
+        knownOrderIds.addAll(fresh)
+        if (fresh.isNotEmpty()) pendingAlarm = true
+
+        if (!pendingAlarm) return 0
 
         ensureChannels(context)
-        val count = fresh.size
-        val title = "سفارش جدید دارید!"
+        val title = "سفارش آنلاین جدید!"
         val body = if (customerName.isNotBlank()) {
-            "مشتری $customerName — $count سفارش جدید"
+            "$customerName — برای قطع آلارم سفارش آنلاین را باز کنید"
         } else {
-            "$count سفارش جدید منتظر بررسی است"
+            "برای قطع آلارم، سفارش‌های آنلاین را باز کنید"
         }
 
         val open = Intent(context, MainActivity::class.java).apply {
@@ -87,9 +80,7 @@ object NotificationHelper {
             putExtra("open_orders", true)
         }
         val pi = PendingIntent.getActivity(
-            context,
-            1001,
-            open,
+            context, 1001, open,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
@@ -99,12 +90,12 @@ object NotificationHelper {
             .setContentText(body)
             .setStyle(NotificationCompat.BigTextStyle().bigText("$title\n$body"))
             .setPriority(NotificationCompat.PRIORITY_HIGH)
-            .setCategory(NotificationCompat.CATEGORY_MESSAGE)
-            .setAutoCancel(true)
-            .setOnlyAlertOnce(true)
+            .setCategory(NotificationCompat.CATEGORY_ALARM)
+            .setOngoing(true) // تا باز کردن صفحه قطع نشود
+            .setAutoCancel(false)
             .setContentIntent(pi)
             .setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION))
-            .setVibrate(longArrayOf(0, 350, 150, 350))
+            .setVibrate(longArrayOf(0, 400, 200, 400))
             .build()
 
         try {
@@ -113,29 +104,21 @@ object NotificationHelper {
         }
         vibrateOnce(context)
         playOnce(context)
-        return count
+        return fresh.size
     }
 
-    /** سازگاری با فراخوانی‌های قبلی */
-    fun notifyNewOrder(context: Context, count: Int, customerName: String = "") {
-        // بدون id مشخص — یک بار با کلید ساختگی
-        notifyNewOrders(
-            context,
-            listOf("batch-${System.currentTimeMillis()}"),
-            customerName
-        )
+    /** فقط وقتی صفحه سفارش آنلاین باز شد */
+    fun acknowledgeOrdersViewed(context: Context) {
+        pendingAlarm = false
+        stopSoundAndNotif(context)
     }
 
-    fun stopAlarm(context: Context) {
-        try {
-            activeRingtone?.stop()
-        } catch (_: Exception) {
-        }
+    fun stopSoundAndNotif(context: Context) {
+        try { activeRingtone?.stop() } catch (_: Exception) {}
         activeRingtone = null
         try {
             NotificationManagerCompat.from(context).cancel(NEW_ORDER_NOTIF_ID)
-        } catch (_: Exception) {
-        }
+        } catch (_: Exception) {}
         try {
             val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 context.getSystemService(VibratorManager::class.java)?.defaultVibrator
@@ -144,8 +127,21 @@ object NotificationHelper {
                 context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
             }
             vibrator?.cancel()
-        } catch (_: Exception) {
-        }
+        } catch (_: Exception) {}
+    }
+
+    /** سازگاری قدیمی */
+    fun notifyNewOrders(context: Context, orderIds: List<String>, customerName: String = "") =
+        onNewOrdersDetected(context, orderIds, customerName)
+
+    fun notifyNewOrder(context: Context, count: Int, customerName: String = "") {
+        onNewOrdersDetected(context, listOf("batch-${System.currentTimeMillis()}"), customerName)
+    }
+
+    fun stopAlarm(context: Context) {
+        // عمداً فقط صدا را قطع نمی‌کند مگر acknowledge
+        // برای سازگاری با کد قدیمی: اگر pending نباشد قطع کن
+        if (!pendingAlarm) stopSoundAndNotif(context)
     }
 
     fun notifyStatus(context: Context, title: String, body: String) {
@@ -156,15 +152,12 @@ object NotificationHelper {
             .setContentText(body)
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .setAutoCancel(true)
-            .setOnlyAlertOnce(true)
             .build()
         try {
             NotificationManagerCompat.from(context).notify(
-                (System.currentTimeMillis() % Int.MAX_VALUE).toInt(),
-                notif
+                (System.currentTimeMillis() % Int.MAX_VALUE).toInt(), notif
             )
-        } catch (_: SecurityException) {
-        }
+        } catch (_: SecurityException) {}
     }
 
     private fun playOnce(context: Context) {
@@ -174,8 +167,7 @@ object NotificationHelper {
             val ring = RingtoneManager.getRingtone(context, uri)
             activeRingtone = ring
             ring?.play()
-        } catch (_: Exception) {
-        }
+        } catch (_: Exception) {}
     }
 
     @Suppress("DEPRECATION")
@@ -188,16 +180,11 @@ object NotificationHelper {
             }
             vibrator?.let {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    // فقط یک الگو — بدون تکرار نامحدود (-1)
-                    it.vibrate(VibrationEffect.createWaveform(longArrayOf(0, 350, 150, 350), -1).let { effect ->
-                        // API نمی‌گذارد waveform بدون repeat؛ یک‌بار با createOneShot کافی است
-                        VibrationEffect.createOneShot(500, VibrationEffect.DEFAULT_AMPLITUDE)
-                    })
+                    it.vibrate(VibrationEffect.createOneShot(450, VibrationEffect.DEFAULT_AMPLITUDE))
                 } else {
-                    it.vibrate(500)
+                    it.vibrate(450)
                 }
             }
-        } catch (_: Exception) {
-        }
+        } catch (_: Exception) {}
     }
 }
