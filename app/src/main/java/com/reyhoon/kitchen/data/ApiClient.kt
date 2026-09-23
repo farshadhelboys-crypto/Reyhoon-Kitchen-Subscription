@@ -10,14 +10,11 @@ import java.io.OutputStreamWriter
 import java.net.HttpURLConnection
 import java.net.URL
 
-/**
- * کلاینت ساده HTTP برای Cloudflare Worker (بدون کتابخانه اضافه)
- */
 object ApiClient {
 
     private fun conn(path: String, method: String, admin: Boolean = false): HttpURLConnection {
         val base = ApiConfig.baseUrl.trimEnd('/')
-        val c = (URL("$base$path").openConnection() as HttpURLConnection).apply {
+        return (URL("$base$path").openConnection() as HttpURLConnection).apply {
             requestMethod = method
             connectTimeout = 15000
             readTimeout = 20000
@@ -25,7 +22,6 @@ object ApiClient {
             if (admin) setRequestProperty("X-Admin-Key", ApiConfig.ADMIN_KEY)
             useCaches = false
         }
-        return c
     }
 
     private fun readBody(c: HttpURLConnection): String {
@@ -55,6 +51,7 @@ object ApiClient {
         }
     }
 
+    // ---------- Menu (sync با Worker) ----------
     suspend fun fetchMenu(): List<FoodItem> = withContext(Dispatchers.IO) {
         if (!ApiConfig.isConfigured) return@withContext emptyList()
         try {
@@ -62,8 +59,9 @@ object ApiClient {
             val body = readBody(c)
             c.disconnect()
             val arr = JSONArray(body)
-            (0 until arr.length()).map { i ->
+            (0 until arr.length()).mapNotNull { i ->
                 val o = arr.getJSONObject(i)
+                if (o.optString("name") == "__ping__") return@mapNotNull null
                 FoodItem(
                     id = o.optString("id"),
                     name = o.optString("name"),
@@ -78,6 +76,81 @@ object ApiClient {
         }
     }
 
+    suspend fun createMenuItem(item: FoodItem): FoodItem? = withContext(Dispatchers.IO) {
+        if (!ApiConfig.isConfigured) return@withContext null
+        try {
+            val c = conn("/api/menu", "POST", admin = true)
+            writeJson(
+                c,
+                JSONObject()
+                    .put("name", item.name)
+                    .put("description", item.description)
+                    .put("price", item.price)
+                    .put("category", item.category)
+                    .put("isAvailable", item.isAvailable)
+            )
+            val body = readBody(c)
+            val code = c.responseCode
+            c.disconnect()
+            if (code !in 200..299) return@withContext null
+            val o = JSONObject(body)
+            FoodItem(
+                id = o.optString("id", item.id),
+                name = o.optString("name", item.name),
+                description = o.optString("description", item.description),
+                price = o.optLong("price", item.price),
+                category = o.optString("category", item.category),
+                isAvailable = o.optBoolean("isAvailable", true)
+            )
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    suspend fun updateMenuItem(item: FoodItem): FoodItem? = withContext(Dispatchers.IO) {
+        if (!ApiConfig.isConfigured) return@withContext null
+        try {
+            val c = conn("/api/menu/${item.id}", "PUT", admin = true)
+            writeJson(
+                c,
+                JSONObject()
+                    .put("name", item.name)
+                    .put("description", item.description)
+                    .put("price", item.price)
+                    .put("category", item.category)
+                    .put("isAvailable", item.isAvailable)
+            )
+            val body = readBody(c)
+            val code = c.responseCode
+            c.disconnect()
+            if (code !in 200..299) return@withContext null
+            val o = JSONObject(body)
+            FoodItem(
+                id = o.optString("id", item.id),
+                name = o.optString("name", item.name),
+                description = o.optString("description", item.description),
+                price = o.optLong("price", item.price),
+                category = o.optString("category", item.category),
+                isAvailable = o.optBoolean("isAvailable", true)
+            )
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    suspend fun deleteMenuItem(id: String): Boolean = withContext(Dispatchers.IO) {
+        if (!ApiConfig.isConfigured) return@withContext false
+        try {
+            val c = conn("/api/menu/$id", "DELETE", admin = true)
+            val ok = c.responseCode in 200..299
+            c.disconnect()
+            ok
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    // ---------- Orders ----------
     suspend fun fetchOrders(customerId: String? = null): List<Order> = withContext(Dispatchers.IO) {
         if (!ApiConfig.isConfigured) return@withContext emptyList()
         try {
@@ -134,7 +207,8 @@ object ApiClient {
         customerId: String,
         items: List<OrderItem>,
         paidNow: Long = 0,
-        note: String = ""
+        note: String = "",
+        source: String = "kitchen"
     ): Order? = withContext(Dispatchers.IO) {
         if (!ApiConfig.isConfigured) return@withContext null
         try {
@@ -156,18 +230,19 @@ object ApiClient {
                     .put("items", arr)
                     .put("paidNow", paidNow)
                     .put("note", note)
+                    .put("source", source)
             )
             val body = readBody(c)
             val code = c.responseCode
             c.disconnect()
             if (code !in 200..299) return@withContext null
-            val obj = JSONObject(body)
-            parseOrder(obj.getJSONObject("order"))
+            parseOrder(JSONObject(body).getJSONObject("order"))
         } catch (_: Exception) {
             null
         }
     }
 
+    // ---------- Customers ----------
     suspend fun fetchCustomerByCode(code: String): Customer? = withContext(Dispatchers.IO) {
         if (!ApiConfig.isConfigured) return@withContext null
         try {
@@ -222,6 +297,51 @@ object ApiClient {
             parseCustomer(JSONObject(body))
         } catch (_: Exception) {
             null
+        }
+    }
+
+    // ---------- Ratings ----------
+    data class DeliveryRating(
+        val id: String,
+        val orderId: String,
+        val customerName: String,
+        val rating: Int,
+        val comment: String,
+        val createdAt: Long
+    )
+
+    data class RatingsResult(
+        val ratings: List<DeliveryRating>,
+        val average: Double,
+        val count: Int
+    )
+
+    suspend fun fetchRatings(): RatingsResult = withContext(Dispatchers.IO) {
+        if (!ApiConfig.isConfigured) return@withContext RatingsResult(emptyList(), 0.0, 0)
+        try {
+            val c = conn("/api/ratings", "GET")
+            val body = readBody(c)
+            c.disconnect()
+            val obj = JSONObject(body)
+            val arr = obj.optJSONArray("ratings") ?: JSONArray()
+            val list = (0 until arr.length()).map { i ->
+                val o = arr.getJSONObject(i)
+                DeliveryRating(
+                    id = o.optString("id"),
+                    orderId = o.optString("orderId"),
+                    customerName = o.optString("customerName"),
+                    rating = o.optInt("rating"),
+                    comment = o.optString("comment", ""),
+                    createdAt = o.optLong("createdAt")
+                )
+            }
+            RatingsResult(
+                ratings = list,
+                average = obj.optDouble("average", 0.0),
+                count = obj.optInt("count", list.size)
+            )
+        } catch (_: Exception) {
+            RatingsResult(emptyList(), 0.0, 0)
         }
     }
 
