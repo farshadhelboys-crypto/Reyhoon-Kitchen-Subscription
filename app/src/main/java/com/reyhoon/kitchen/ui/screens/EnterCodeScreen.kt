@@ -6,13 +6,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Kitchen
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
@@ -21,8 +19,10 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.reyhoon.kitchen.data.AppRepository
-import com.reyhoon.kitchen.ui.theme.GreenPrimary
-import com.reyhoon.kitchen.ui.theme.OrangeSecondary
+import com.reyhoon.kitchen.ui.components.ReyhoonLogo
+import com.reyhoon.kitchen.ui.theme.Cream
+import com.reyhoon.kitchen.ui.theme.GreenMid
+import com.reyhoon.kitchen.ui.theme.GreenPale
 
 @Composable
 fun EnterCodeScreen(
@@ -40,13 +40,21 @@ fun EnterCodeScreen(
             .fillMaxSize()
             .background(
                 Brush.verticalGradient(
-                    listOf(
-                        GreenPrimary.copy(alpha = 0.12f),
-                        MaterialTheme.colorScheme.background
-                    )
+                    listOf(GreenPale, Cream, MaterialTheme.colorScheme.background)
                 )
             )
     ) {
+        // Decorative soft circles
+        Box(
+            modifier = Modifier
+                .size(220.dp)
+                .offset(x = (-40).dp, y = (-30).dp)
+                .background(
+                    Brush.radialGradient(listOf(GreenMid.copy(alpha = 0.12f), GreenPale.copy(alpha = 0f))),
+                    shape = RoundedCornerShape(50)
+                )
+        )
+
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -55,42 +63,30 @@ fun EnterCodeScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            Box(
-                modifier = Modifier
-                    .size(96.dp)
-                    .clip(RoundedCornerShape(28.dp))
-                    .background(GreenPrimary),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Kitchen,
-                    contentDescription = null,
-                    modifier = Modifier.size(52.dp),
-                    tint = MaterialTheme.colorScheme.onPrimary
-                )
-            }
+            ReyhoonLogo(size = 110.dp)
 
-            Spacer(modifier = Modifier.height(20.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
             Text(
                 text = "آشپزخانه ریحون",
                 style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.Bold,
-                color = GreenPrimary
+                color = GreenMid
             )
             Text(
-                text = "سیستم اشتراک و حسابداری",
+                text = "طعم خانه، با حسابداری دقیق",
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
                 textAlign = TextAlign.Center
             )
 
-            Spacer(modifier = Modifier.height(36.dp))
+            Spacer(modifier = Modifier.height(32.dp))
 
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(20.dp),
-                elevation = CardDefaults.cardElevation(6.dp)
+                shape = RoundedCornerShape(22.dp),
+                elevation = CardDefaults.cardElevation(8.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
             ) {
                 Column(
                     modifier = Modifier.padding(24.dp),
@@ -164,9 +160,8 @@ fun EnterCodeScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(28.dp))
+            Spacer(modifier = Modifier.height(24.dp))
 
-            // Admin entry
             OutlinedButton(
                 onClick = {
                     AppRepository.isAdmin.value = true

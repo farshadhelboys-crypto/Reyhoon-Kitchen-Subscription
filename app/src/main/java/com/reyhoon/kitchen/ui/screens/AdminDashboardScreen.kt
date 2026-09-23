@@ -16,7 +16,8 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.reyhoon.kitchen.data.AppRepository
-import com.reyhoon.kitchen.ui.theme.GreenPrimary
+import com.reyhoon.kitchen.ui.components.ReyhoonLogo
+import com.reyhoon.kitchen.ui.theme.GreenMid
 import com.reyhoon.kitchen.ui.theme.OrangeSecondary
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -29,22 +30,32 @@ fun AdminDashboardScreen(
     modifier: Modifier = Modifier
 ) {
     var selectedPeriod by remember { mutableStateOf("روزانه") }
-    val summary = remember(selectedPeriod, AppRepository.orders.size) {
+    // Recompose when orders/customers change
+    val orderCount = AppRepository.orders.size
+    val customerCount = AppRepository.customers.size
+    val summary = remember(selectedPeriod, orderCount) {
         AppRepository.getSalesSummary(selectedPeriod)
     }
-    val totalDebt = AppRepository.totalCustomerDebt()
+    val totalDebt = remember(orderCount, customerCount) { AppRepository.totalCustomerDebt() }
+    val totalCredit = remember(orderCount, customerCount) { AppRepository.totalCustomerCredit() }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("پنل ادمین ریحون", fontWeight = FontWeight.Bold) },
+                title = {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        ReyhoonLogo(size = 34.dp)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("پنل ادمین ریحون", fontWeight = FontWeight.Bold)
+                    }
+                },
                 actions = {
                     IconButton(onClick = onLogout) {
                         Icon(Icons.AutoMirrored.Filled.Logout, "خروج")
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = GreenPrimary,
+                    containerColor = GreenMid,
                     titleContentColor = MaterialTheme.colorScheme.onPrimary,
                     actionIconContentColor = MaterialTheme.colorScheme.onPrimary
                 )
@@ -76,63 +87,32 @@ fun AdminDashboardScreen(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                StatCard(
-                    title = "فروش کل",
-                    value = AppRepository.formatPrice(summary.totalSales),
-                    subtitle = "${summary.orderCount} سفارش",
-                    modifier = Modifier.weight(1f),
-                    color = GreenPrimary
-                )
-                StatCard(
-                    title = "دریافتی",
-                    value = AppRepository.formatPrice(summary.totalPaid),
-                    subtitle = "تومان",
-                    modifier = Modifier.weight(1f),
-                    color = OrangeSecondary
-                )
+                StatCard("فروش کل", AppRepository.formatPrice(summary.totalSales), "${summary.orderCount} سفارش", Modifier.weight(1f), GreenMid)
+                StatCard("دریافتی", AppRepository.formatPrice(summary.totalPaid), "تومان", Modifier.weight(1f), OrangeSecondary)
             }
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                StatCard(
-                    title = "بدهی دوره",
-                    value = AppRepository.formatPrice(summary.totalDebt),
-                    subtitle = "تومان",
-                    modifier = Modifier.weight(1f),
-                    color = MaterialTheme.colorScheme.error
-                )
-                StatCard(
-                    title = "کل بدهی مشتریان",
-                    value = AppRepository.formatPrice(totalDebt),
-                    subtitle = "تومان",
-                    modifier = Modifier.weight(1f),
-                    color = MaterialTheme.colorScheme.error
-                )
+                StatCard("بدهی دوره", AppRepository.formatPrice(summary.totalDebt), "تومان", Modifier.weight(1f), MaterialTheme.colorScheme.error)
+                StatCard("کل بدهی مشتریان", AppRepository.formatPrice(totalDebt), "تومان", Modifier.weight(1f), MaterialTheme.colorScheme.error)
             }
+
+            StatCard(
+                title = "کل اعتبار مشتریان",
+                value = AppRepository.formatPrice(totalCredit),
+                subtitle = "بدهی آشپزخانه به مشتریان",
+                modifier = Modifier.fillMaxWidth(),
+                color = GreenMid
+            )
 
             Spacer(modifier = Modifier.height(8.dp))
             Text("عملیات سریع", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
 
-            AdminActionButton(
-                icon = Icons.Default.AddShoppingCart,
-                title = "ثبت سفارش جدید",
-                subtitle = "سفارش + پرداخت جزئی / بدهی",
-                onClick = onNavigateToNewOrder
-            )
-            AdminActionButton(
-                icon = Icons.Default.RestaurantMenu,
-                title = "مدیریت منوی غذا",
-                subtitle = "افزودن، ویرایش، حذف آیتم",
-                onClick = onNavigateToMenuManage
-            )
-            AdminActionButton(
-                icon = Icons.Default.People,
-                title = "مشتریان و بدهی",
-                subtitle = "افزودن مشتری، آدرس، تسویه بدهی",
-                onClick = onNavigateToCustomers
-            )
+            AdminActionButton(Icons.Default.AddShoppingCart, "ثبت سفارش جدید", "سفارش + پرداخت جزئی / اعتبار", onNavigateToNewOrder)
+            AdminActionButton(Icons.Default.RestaurantMenu, "مدیریت منوی غذا", "افزودن، ویرایش، حذف آیتم", onNavigateToMenuManage)
+            AdminActionButton(Icons.Default.People, "مشتریان و بدهی", "افزودن مشتری، آدرس، تسویه و اعتبار", onNavigateToCustomers)
         }
     }
 }
@@ -175,7 +155,7 @@ private fun AdminActionButton(
             modifier = Modifier.padding(16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(icon, null, tint = GreenPrimary, modifier = Modifier.size(28.dp))
+            Icon(icon, null, tint = GreenMid, modifier = Modifier.size(28.dp))
             Spacer(modifier = Modifier.width(14.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(title, fontWeight = FontWeight.SemiBold)

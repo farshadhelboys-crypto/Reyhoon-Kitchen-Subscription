@@ -1,5 +1,6 @@
 package com.reyhoon.kitchen.ui.screens
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -12,10 +13,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.reyhoon.kitchen.data.AppRepository
-import com.reyhoon.kitchen.ui.theme.GreenPrimary
+import com.reyhoon.kitchen.ui.components.ReyhoonLogo
+import com.reyhoon.kitchen.ui.theme.GreenMid
+import com.reyhoon.kitchen.ui.theme.GreenPale
 import com.reyhoon.kitchen.ui.theme.OrangeSecondary
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -32,7 +36,11 @@ fun HomeScreen(
         topBar = {
             TopAppBar(
                 title = {
-                    Text("ریحون", fontWeight = FontWeight.Bold)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        ReyhoonLogo(size = 36.dp)
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Text("ریحون", fontWeight = FontWeight.Bold)
+                    }
                 },
                 actions = {
                     IconButton(onClick = onLogout) {
@@ -40,7 +48,7 @@ fun HomeScreen(
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = GreenPrimary,
+                    containerColor = GreenMid,
                     titleContentColor = MaterialTheme.colorScheme.onPrimary,
                     actionIconContentColor = MaterialTheme.colorScheme.onPrimary
                 )
@@ -62,6 +70,11 @@ fun HomeScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
+                .background(
+                    Brush.verticalGradient(
+                        listOf(GreenPale.copy(alpha = 0.5f), MaterialTheme.colorScheme.background)
+                    )
+                )
                 .verticalScroll(rememberScrollState())
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)
@@ -69,22 +82,83 @@ fun HomeScreen(
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(18.dp),
-                colors = CardDefaults.cardColors(containerColor = GreenPrimary.copy(alpha = 0.12f))
+                colors = CardDefaults.cardColors(containerColor = GreenMid.copy(alpha = 0.12f))
             ) {
-                Column(modifier = Modifier.padding(20.dp)) {
-                    Text(
-                        text = "سلام ${customer!!.name} عزیز 👋",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold
+                Row(
+                    modifier = Modifier.padding(20.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    ReyhoonLogo(size = 56.dp)
+                    Spacer(modifier = Modifier.width(14.dp))
+                    Column {
+                        Text(
+                            text = "سلام ${customer!!.name} عزیز 👋",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = "به آشپزخانه ریحون خوش آمدید",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                        )
+                    }
+                }
+            }
+
+            // Balance cards
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Card(
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (customer!!.debt > 0)
+                            MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.45f)
+                        else GreenPale
                     )
-                    Spacer(modifier = Modifier.height(4.dp))
+                ) {
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        Text("بدهی شما", style = MaterialTheme.typography.labelMedium)
+                        Text(
+                            if (customer!!.debt > 0)
+                                "${AppRepository.formatPrice(customer!!.debt)} ت"
+                            else "۰",
+                            fontWeight = FontWeight.Bold,
+                            color = if (customer!!.debt > 0) MaterialTheme.colorScheme.error else GreenMid
+                        )
+                    }
+                }
+                Card(
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = CardDefaults.cardColors(containerColor = GreenPale)
+                ) {
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        Text("اعتبار شما", style = MaterialTheme.typography.labelMedium)
+                        Text(
+                            if (customer!!.credit > 0)
+                                "${AppRepository.formatPrice(customer!!.credit)} ت"
+                            else "۰",
+                            fontWeight = FontWeight.Bold,
+                            color = GreenMid
+                        )
+                    }
+                }
+            }
+
+            if (customer!!.credit > 0) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = CardDefaults.cardColors(containerColor = GreenMid.copy(alpha = 0.1f))
+                ) {
                     Text(
-                        text = if (customer!!.debt > 0)
-                            "بدهی فعلی: ${AppRepository.formatPrice(customer!!.debt)} تومان"
-                        else
-                            "بدهی ندارید ✓",
+                        "در سفارش بعدی، مبلغ ${AppRepository.formatPrice(customer!!.credit)} تومان بابت اعتبار شما از قیمت غذا کسر خواهد شد.",
+                        modifier = Modifier.padding(14.dp),
                         style = MaterialTheme.typography.bodyMedium,
-                        color = if (customer!!.debt > 0) OrangeSecondary else GreenPrimary
+                        color = GreenMid
                     )
                 }
             }
@@ -130,33 +204,6 @@ fun HomeScreen(
                 Icon(Icons.Default.EditLocation, null)
                 Spacer(modifier = Modifier.width(8.dp))
                 Text("ویرایش آدرس")
-            }
-
-            if (customer!!.debt > 0) {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.4f))
-                ) {
-                    Column(modifier = Modifier.padding(18.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.AccountBalanceWallet, null, tint = MaterialTheme.colorScheme.error)
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("وضعیت بدهی", fontWeight = FontWeight.SemiBold)
-                        }
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            "مبلغ باقی‌مانده: ${AppRepository.formatPrice(customer!!.debt)} تومان",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.error
-                        )
-                        Text(
-                            "برای تسویه با ادمین هماهنگ کنید.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
-                        )
-                    }
-                }
             }
         }
     }
