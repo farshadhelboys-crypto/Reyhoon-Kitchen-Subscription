@@ -8,7 +8,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Remove
-import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -19,7 +18,6 @@ import com.reyhoon.kitchen.data.ApiClient
 import com.reyhoon.kitchen.data.ApiConfig
 import com.reyhoon.kitchen.data.AppRepository
 import com.reyhoon.kitchen.data.Customer
-import com.reyhoon.kitchen.data.FoodItem
 import com.reyhoon.kitchen.data.OrderItem
 import com.reyhoon.kitchen.ui.theme.GreenPrimary
 import com.reyhoon.kitchen.ui.theme.OrangeSecondary
@@ -27,15 +25,20 @@ import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun NewOrderScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
-    var query by remember { mutableStateOf("") }
+fun NewOrderScreen(
+    onBack: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val customers = AppRepository.customers
+    val menu = AppRepository.menuItems.filter { it.isAvailable }
+    val scope = rememberCoroutineScope()
+
     var selectedCustomer by remember { mutableStateOf<Customer?>(null) }
-    var menu by remember { mutableStateOf(AppRepository.menuItems.filter { it.isAvailable }) }
     var quantities by remember { mutableStateOf<Map<String, Int>>(emptyMap()) }
     var paidNow by remember { mutableStateOf("") }
     var resultMessage by remember { mutableStateOf<String?>(null) }
     var saving by remember { mutableStateOf(false) }
-    val scope = rememberCoroutineScope()
+    var expanded by remember { mutableStateOf(false) }
 
     val cartItems = remember(quantities, menu) {
         menu.mapNotNull { food ->
@@ -46,31 +49,6 @@ fun NewOrderScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
     val total = cartItems.sumOf { it.total }
     val customerCredit = selectedCustomer?.credit ?: 0L
     val afterCredit = (total - customerCredit).coerceAtLeast(0)
-
-    LaunchedEffect(Unit) {
-        if (ApiConfig.isConfigured) {
-            val remote = ApiClient.fetchMenu()
-            if (remote.isNotEmpty()) {
-                AppRepository.menuItems.clear()
-                AppRepository.menuItems.addAll(remote)
-                menu = remote.filter { it.isAvailable }
-            }
-            val customers = ApiClient.fetchCustomers()
-            if (customers.isNotEmpty()) {
-                AppRepository.customers.clear()
-                AppRepository.customers.addAll(customers)
-            }
-        }
-    }
-
-    val filtered = remember(query) {
-        val q = query.trim()
-        if (q.isBlank()) AppRepository.customers.take(20)
-        else AppRepository.customers.filter {
-            it.name.contains(q, true) || it.phone.contains(q) ||
-                (it.subscriptionCode?.contains(q) == true)
-        }.take(20)
-    }
 
     Scaffold(
         topBar = {
@@ -88,63 +66,54 @@ fun NewOrderScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
         },
         modifier = modifier
     ) { padding ->
-        Column(Modifier = Modifier.fillMaxSize().padding(padding).padding(16.dp)) {
-            if (selectedCustomer == null) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .padding(16.dp)
+        ) {
+            Text("انتخاب مشتری", fontWeight = FontWeight.SemiBold)
+            Spacer(modifier = Modifier.height(6.dp))
+            ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }) {
                 OutlinedTextField(
-                    value = query,
-                    onValueChange = { query = it },
-                    label = { Text("جستجوی مشتری (نام / تلفن / کد)") },
-                    leadingIcon = { Icon(Icons.Default.Search, null) },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
+                    value = selectedCustomer?.let {
+                        buildString {
+                            append(it.name)
+                            if (it.credit > 0) append(" | اعتبار: ${AppRepository.formatPrice(it.credit)}")
+                            if (it.debt > 0) append(" | بدهی: ${AppRepository.formatPrice(it.debt)}")
+                        }
+                    } ?: "انتخاب کنید",
+                    onValueChange = {},
+                    readOnly = true,
+                    modifier = Modifier.menuAnchor().fillMaxWidth(),
+                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) }
                 )
-                Spacer(modifier = Modifier.height(8.dp))
-                LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    items(filtered, key = { it.id }) { c ->
-                        Card(
-                            onClick = { selectedCustomer = c },
-                            shape = RoundedCornerShape(10.dp),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Column(modifier = Modifier.padding(12.dp)) {
-                                Text(c.name, fontWeight = FontWeight.SemiBold)
-                                Text("تلفن: ${c.phone} | کد: ${c.subscriptionCode ?: "—"}")
-                                if (c.debt > 0) {
-                                    Text(
-                                        "بدهی: ${AppRepository.formatPrice(c.debt)} تومان",
-                                        color = MaterialTheme.colorScheme.error,
-                                        fontWeight = FontWeight.Bold
-                                    )
+                ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                    customers.forEach { c ->
+                        DropdownMenuItem(
+                            text = {
+                                Column {
+                                    Text(c.name, fontWeight = FontWeight.SemiBold)
+                                    Text("تلفن: ${c.phone} | کد: ${c.subscriptionCode ?: "—"}")
+                                    if (c.debt > 0) {
+                                        Text(
+                                            "بدهی: ${AppRepository.formatPrice(c.debt)}",
+                                            color = MaterialTheme.colorScheme.error
+                                        )
+                                    }
                                 }
+                            },
+                            onClick = {
+                                selectedCustomer = c
+                                expanded = false
                             }
-                        }
+                        )
                     }
                 }
-            } else {
-                val c = selectedCustomer!!
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = GreenPrimary.copy(alpha = 0.1f)),
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(c.name, fontWeight = FontWeight.Bold)
-                            Text("کد: ${c.subscriptionCode ?: "—"} | تلفن: ${c.phone}")
-                            if (customerCredit > 0) {
-                                Text(
-                                    "این مشتری ${AppRepository.formatPrice(customerCredit)} تومان اعتبار دارد و از مبلغ سفارش کسر می‌شود.",
-                                    color = GreenPrimary,
-                                    fontWeight = FontWeight.SemiBold
-                                )
-                            }
-                        }
-                        TextButton(onClick = { selectedCustomer = null; quantities = emptyMap(); paidNow = "" }) {
-                            Text("تغییر")
-                        }
-                    }
-                }
-                Spacer(modifier = Modifier.height(10.dp))
+            }
+
+            if (selectedCustomer != null) {
+                Spacer(modifier = Modifier.height(12.dp))
                 Text("انتخاب غذا", fontWeight = FontWeight.SemiBold)
                 LazyColumn(
                     modifier = Modifier.weight(1f),
@@ -165,11 +134,14 @@ fun NewOrderScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                                     )
                                 }
                                 val qty = quantities[food.id] ?: 0
-                                IconButton(onClick = {
-                                    quantities = quantities.toMutableMap().apply {
-                                        if (qty <= 1) remove(food.id) else put(food.id, qty - 1)
-                                    }
-                                }, enabled = qty > 0) { Icon(Icons.Default.Remove, null) }
+                                IconButton(
+                                    onClick = {
+                                        quantities = quantities.toMutableMap().apply {
+                                            if (qty <= 1) remove(food.id) else put(food.id, qty - 1)
+                                        }
+                                    },
+                                    enabled = qty > 0
+                                ) { Icon(Icons.Default.Remove, null) }
                                 Text("$qty", fontWeight = FontWeight.Bold, modifier = Modifier.width(24.dp))
                                 IconButton(onClick = {
                                     quantities = quantities.toMutableMap().apply { put(food.id, qty + 1) }
@@ -235,15 +207,15 @@ fun NewOrderScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                     Spacer(modifier = Modifier.height(12.dp))
                     Button(
                         onClick = {
-                            val cust = selectedCustomer ?: return@Button
+                            val c = selectedCustomer ?: return@Button
                             val paid = paidNow.toLongOrNull() ?: 0L
                             scope.launch {
                                 saving = true
-                                val result = AppRepository.createOrder(cust, cartItems, paid)
+                                val result = AppRepository.createOrder(c, cartItems, paid)
                                 var serverOk = false
                                 if (ApiConfig.isConfigured) {
                                     val remote = ApiClient.createOrder(
-                                        customerId = cust.id,
+                                        customerId = c.id,
                                         items = cartItems,
                                         paidNow = paid,
                                         note = result.order.note,
@@ -254,13 +226,13 @@ fun NewOrderScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                                         val idx = AppRepository.orders.indexOfFirst { it.id == result.order.id }
                                         if (idx >= 0) {
                                             AppRepository.orders[idx] = remote.copy(
-                                                customerPhone = remote.customerPhone.ifBlank { cust.phone },
-                                                customerAddress = remote.customerAddress.ifBlank { cust.address.fullAddress() }
+                                                customerPhone = remote.customerPhone.ifBlank { c.phone },
+                                                customerAddress = remote.customerAddress.ifBlank { c.address.fullAddress() }
                                             )
                                         } else {
                                             AppRepository.orders.add(0, remote)
                                         }
-                                        val refreshed = ApiClient.fetchCustomerByCode(cust.subscriptionCode ?: "")
+                                        val refreshed = ApiClient.fetchCustomerByCode(c.subscriptionCode ?: "")
                                         if (refreshed != null) {
                                             AppRepository.updateCustomer(refreshed)
                                             selectedCustomer = refreshed
