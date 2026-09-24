@@ -65,7 +65,8 @@ object ApiClient {
                     description = o.optString("description", ""),
                     price = o.optLong("price"),
                     category = o.optString("category", "عمومی"),
-                    isAvailable = o.optBoolean("isAvailable", true)
+                    isAvailable = o.optBoolean("isAvailable", true),
+                    extraSkewerPrice = o.optLong("extraSkewerPrice", 0)
                 )
             }
         } catch (_: Exception) { emptyList() }
@@ -78,6 +79,7 @@ object ApiClient {
             writeJson(c, JSONObject()
                 .put("name", item.name).put("description", item.description)
                 .put("price", item.price).put("category", item.category)
+                .put("extraSkewerPrice", item.extraSkewerPrice)
                 .put("isAvailable", item.isAvailable))
             val body = readBody(c)
             val code = c.responseCode
@@ -86,7 +88,8 @@ object ApiClient {
             val o = JSONObject(body)
             FoodItem(o.optString("id", item.id), o.optString("name", item.name),
                 o.optString("description", item.description), o.optLong("price", item.price),
-                o.optString("category", item.category), o.optBoolean("isAvailable", true))
+                o.optString("category", item.category), o.optBoolean("isAvailable", true),
+                o.optLong("extraSkewerPrice", item.extraSkewerPrice))
         } catch (_: Exception) { null }
     }
 
@@ -97,6 +100,7 @@ object ApiClient {
             writeJson(c, JSONObject()
                 .put("name", item.name).put("description", item.description)
                 .put("price", item.price).put("category", item.category)
+                .put("extraSkewerPrice", item.extraSkewerPrice)
                 .put("isAvailable", item.isAvailable))
             val body = readBody(c)
             val code = c.responseCode
@@ -105,7 +109,8 @@ object ApiClient {
             val o = JSONObject(body)
             FoodItem(o.optString("id", item.id), o.optString("name", item.name),
                 o.optString("description", item.description), o.optLong("price", item.price),
-                o.optString("category", item.category), o.optBoolean("isAvailable", true))
+                o.optString("category", item.category), o.optBoolean("isAvailable", true),
+                o.optLong("extraSkewerPrice", item.extraSkewerPrice))
         } catch (_: Exception) { null }
     }
 
@@ -228,7 +233,7 @@ object ApiClient {
             val c = conn("/api/customers", "POST", admin = true)
             writeJson(c, JSONObject().put("name", customer.name).put("phone", customer.phone)
                 .put("subscriptionCode", customer.subscriptionCode).put("address", addr)
-                .put("debt", 0).put("credit", customer.credit))
+                .put("debt", customer.debt).put("credit", customer.credit))
             val body = readBody(c)
             val code = c.responseCode
             c.disconnect()
