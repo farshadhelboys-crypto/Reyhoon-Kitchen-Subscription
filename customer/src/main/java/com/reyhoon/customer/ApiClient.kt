@@ -10,7 +10,7 @@ import java.io.OutputStreamWriter
 import java.net.HttpURLConnection
 import java.net.URL
 
-data class FoodItem(val id: String, val name: String, val description: String, val price: Long, val category: String, val extraSkewerPrice: Long = 0L)
+data class FoodItem(val id: String, val name: String, val description: String, val price: Long, val category: String, val extraSkewerPrice: Long = 0L, val priceTier: String = "regular")
 data class Address(val street: String, val city: String) {
     fun full(): String = listOf(street, city).filter { it.isNotBlank() }.joinToString(" - ")
 }
@@ -117,7 +117,8 @@ object ApiClient {
                 else FoodItem(
                     o.optString("id"), o.optString("name"), o.optString("description"),
                     o.optLong("price"), o.optString("category", "عمومی"),
-                    o.optLong("extraSkewerPrice", 0)
+                    o.optLong("extraSkewerPrice", 0),
+                    o.optString("priceTier", "regular").ifBlank { "regular" }
                 )
             }
         } catch (_: Exception) { emptyList() }
