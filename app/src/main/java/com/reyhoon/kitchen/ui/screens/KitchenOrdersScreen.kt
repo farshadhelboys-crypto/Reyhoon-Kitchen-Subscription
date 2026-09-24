@@ -203,7 +203,25 @@ private fun OrderCard(
             }
             Text("ثبت: ${formatTs(order.createdAt)}")
             if (order.deliveredAt != null) Text("تحویل: ${formatTs(order.deliveredAt)}", color = GreenMid)
-            order.items.forEach { Text("• ${it.foodName} × ${it.quantity}") }
+            run {
+                val tiers = order.items.map { it.priceTier }.distinct()
+                val label = when {
+                    order.items.isEmpty() -> null
+                    tiers.size == 1 && tiers.first() == "economy" -> "اقتصادی"
+                    tiers.size == 1 -> "غیر اقتصادی"
+                    else -> "مختلط (اقتصادی و غیر اقتصادی)"
+                }
+                if (label != null) {
+                    Text(
+                        "نوع سفارش: $label",
+                        fontWeight = FontWeight.Bold,
+                        color = OrangeSecondary
+                    )
+                }
+            }
+            order.items.forEach {
+                Text("• ${it.foodName} × ${it.quantity} (${it.priceTierLabel})")
+            }
             Text(
                 buildString {
                     append("جمع: ${AppRepository.formatPrice(order.totalAmount)}")
