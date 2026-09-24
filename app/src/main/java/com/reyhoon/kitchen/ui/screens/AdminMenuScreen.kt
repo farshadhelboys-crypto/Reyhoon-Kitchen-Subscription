@@ -59,7 +59,7 @@ fun AdminMenuScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                 title = {
                     Column {
                         Text("مدیریت منو", fontWeight = FontWeight.Bold)
-                        Text("دسته‌ها با آیکن: چلو 🍚 خورشت 🍲 نوشیدنی 🥤", style = MaterialTheme.typography.bodySmall)
+                        Text("دسته‌ها: چلو 🍚 کباب 🍢 خورشت 🍲 نوشیدنی 🥤", style = MaterialTheme.typography.bodySmall)
                     }
                 },
                 navigationIcon = {
@@ -124,7 +124,11 @@ fun AdminMenuScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                                     Column(modifier = Modifier.weight(1f)) {
                                         Text(item.name, fontWeight = FontWeight.SemiBold)
                                         Text(
-                                            "${AppRepository.formatPrice(item.price)} تومان",
+                                            buildString {
+                                                append("${AppRepository.formatPrice(item.price)} تومان")
+                                                if (item.extraSkewerPrice > 0)
+                                                    append(" | سیخ: ${AppRepository.formatPrice(item.extraSkewerPrice)}")
+                                            },
                                             color = OrangeSecondary, fontWeight = FontWeight.Medium
                                         )
                                     }
@@ -181,6 +185,11 @@ private fun FoodEditDialog(
 ) {
     var name by remember { mutableStateOf(initial?.name ?: "") }
     var price by remember { mutableStateOf(initial?.price?.toString() ?: "") }
+    var skewerPrice by remember {
+        mutableStateOf(
+            if ((initial?.extraSkewerPrice ?: 0L) > 0) initial!!.extraSkewerPrice.toString() else ""
+        )
+    }
     var category by remember { mutableStateOf(initial?.category ?: MenuCategories.ALL.first()) }
     var desc by remember { mutableStateOf(initial?.description ?: "") }
     var catExpanded by remember { mutableStateOf(false) }
@@ -195,6 +204,13 @@ private fun FoodEditDialog(
                     value = price,
                     onValueChange = { price = it.filter { c -> c.isDigit() } },
                     label = { Text("قیمت (تومان)") },
+                    singleLine = true
+                )
+                OutlinedTextField(
+                    value = skewerPrice,
+                    onValueChange = { skewerPrice = it.filter { c -> c.isDigit() } },
+                    label = { Text("قیمت سیخ اضافه (اختیاری)") },
+                    supportingText = { Text("برای کباب‌ها — اگر خالی باشد گزینه سیخ نمایش داده نمی‌شود") },
                     singleLine = true
                 )
                 ExposedDropdownMenuBox(expanded = catExpanded, onExpandedChange = { catExpanded = it }) {
@@ -222,6 +238,7 @@ private fun FoodEditDialog(
             Button(
                 onClick = {
                     val p = price.toLongOrNull() ?: 0L
+                    val sk = skewerPrice.toLongOrNull() ?: 0L
                     if (name.isNotBlank() && p > 0) {
                         onSave(
                             FoodItem(
@@ -229,7 +246,9 @@ private fun FoodEditDialog(
                                 name = name.trim(),
                                 description = desc.trim(),
                                 price = p,
-                                category = category
+                                category = category,
+                                isAvailable = initial?.isAvailable ?: true,
+                                extraSkewerPrice = sk
                             )
                         )
                     }
