@@ -11,7 +11,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.reyhoon.kitchen.data.ApiClient
@@ -20,8 +19,8 @@ import com.reyhoon.kitchen.data.AppRepository
 import com.reyhoon.kitchen.data.Order
 import com.reyhoon.kitchen.data.OrderStatus
 import com.reyhoon.kitchen.ui.theme.GreenMid
+import com.reyhoon.kitchen.ui.theme.GreenPrimary
 import com.reyhoon.kitchen.ui.theme.OrangeSecondary
-import com.reyhoon.kitchen.util.NotificationHelper
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
@@ -31,53 +30,33 @@ import java.util.Locale
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun KitchenOrdersScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
     var orders by remember { mutableStateOf<List<Order>>(emptyList()) }
     var loading by remember { mutableStateOf(false) }
-    var lastSeenAt by remember { mutableStateOf(System.currentTimeMillis() - 60_000) }
-    var online by remember { mutableStateOf(ApiConfig.isConfigured) }
+    var message by remember { mutableStateOf<String?>(null) }
     var payOrder by remember { mutableStateOf<Order?>(null) }
+    val scope = rememberCoroutineScope()
+    val df = remember { SimpleDateFormat("HH:mm yyyy/MM/dd", Locale("fa")) }
 
-    LaunchedEffect(Unit) {
-        NotificationHelper.acknowledgeOrdersViewed(context)
-    }
-
-    fun formatTs(ts: Long?): String {
-        if (ts == null || ts <= 0) return "—"
-        return SimpleDateFormat("yyyy/MM/dd HH:mm", Locale("fa")).format(Date(ts))
-    }
-
-    suspend fun refresh(fromPoll: Boolean = false) {
-        if (!fromPoll) loading = true
+    suspend fun refresh() {
+        loading = true
         if (ApiConfig.isConfigured) {
-            online = ApiClient.health()
-            val fresh = ApiClient.fetchNewOrders(lastSeenAt)
-            if (fresh.isNotEmpty()) {
-                lastSeenAt = maxOf(lastSeenAt, fresh.maxOf { it.createdAt })
-            }
             val remote = ApiClient.fetchOrders()
-            remote.forEach { r ->
-                val idx = AppRepository.orders.indexOfFirst { it.id == r.id }
-                if (idx >= 0) AppRepository.orders[idx] = r
-                else AppRepository.orders.add(0, r)
+            if (remote.isNotEmpty()) {
+                AppRepository.orders.clear()
+                AppRepository.orders.addAll(remote)
             }
-            val byId = linkedMapOf<String, Order>()
-            AppRepository.orders.forEach { byId[it.id] = it }
-            remote.forEach { byId[it.id] = it }
-            orders = byId.values.sortedByDescending { it.createdAt }
-        } else {
-            online = false
-            orders = AppRepository.orders.toList()
         }
+        orders = AppRepository.orders
+            .filter { it.source != "prior_debt" }
+            .sortedByDescending { it.createdAt }
         loading = false
     }
 
     LaunchedEffect(Unit) {
         refresh()
         while (true) {
-            delay(8_000)
-            if (ApiConfig.isConfigured) refresh(fromPoll = true)
+            delay(12_000)
+            refresh()
         }
     }
 
@@ -88,23 +67,19 @@ fun KitchenOrdersScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                     Column {
                         Text("سفارش‌ها (آنلاین + حضوری)", fontWeight = FontWeight.Bold)
                         Text(
-                            if (online) "متصل" else "آفلاین / قطع",
+                            "نقد واقعی جدا از اعتبار مشتری نمایش داده می‌شود",
                             style = MaterialTheme.typography.bodySmall
                         )
                     }
                 },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "بازگشت")
-                    }
+                    IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "بازگشت") }
                 },
                 actions = {
-                    IconButton(onClick = { scope.launch { refresh() } }) {
-                        Icon(Icons.Filled.Refresh, contentDescription = "بروزرسانی")
-                    }
+                    IconButton(onClick = { scope.launch { refresh() } }) { Icon(Icons.Default.Refresh, null) }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = GreenMid,
+                    containerColor = GreenPrimary,
                     titleContentColor = MaterialTheme.colorScheme.onPrimary,
                     navigationIconContentColor = MaterialTheme.colorScheme.onPrimary,
                     actionIconContentColor = MaterialTheme.colorScheme.onPrimary
@@ -114,31 +89,32 @@ fun KitchenOrdersScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
         modifier = modifier
     ) { padding ->
         Column(modifier = Modifier.fillMaxSize().padding(padding)) {
+            message?.let {
+                Text(it, modifier = Modifier.padding(12.dp), fontWeight = FontWeight.SemiBold, color = GreenPrimary)
+            }
             if (loading && orders.isEmpty()) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator()
-                }
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
             } else if (orders.isEmpty()) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Text("سفارشی نیست", style = MaterialTheme.typography.titleMedium)
                 }
             } else {
                 LazyColumn(
-                    contentPadding = PaddingValues(12.dp),
+                    contentPadding = PaddingValues(16.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     items(orders, key = { it.id }) { order ->
                         OrderCard(
                             order = order,
-                            formatTs = ::formatTs,
+                            formatTs = { ts -> if (ts == null) "—" else df.format(Date(ts)) },
                             onStatus = { status ->
                                 scope.launch {
                                     if (ApiConfig.isConfigured) {
-                                        ApiClient.updateOrderStatus(order.id, status, byKitchen = true)
-                                    }
-                                    val idx = AppRepository.orders.indexOfFirst { it.id == order.id }
-                                    if (idx >= 0) {
-                                        AppRepository.orders[idx] = AppRepository.orders[idx].copy(status = status)
+                                        val updated = ApiClient.updateOrderStatus(order.id, status, byKitchen = true)
+                                        if (updated != null) {
+                                            val idx = AppRepository.orders.indexOfFirst { it.id == order.id }
+                                            if (idx >= 0) AppRepository.orders[idx] = updated
+                                        }
                                     }
                                     refresh()
                                 }
@@ -152,13 +128,17 @@ fun KitchenOrdersScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
     }
 
     payOrder?.let { o ->
-        var amount by remember { mutableStateOf("") }
+        var amount by remember(o.id) { mutableStateOf(if (o.remaining > 0) o.remaining.toString() else "") }
         AlertDialog(
             onDismissRequest = { payOrder = null },
             title = { Text("ثبت دریافت وجه — ${o.customerName}") },
             text = {
                 Column {
-                    Text("جمع: ${AppRepository.formatPrice(o.totalAmount)} | دریافتی: ${AppRepository.formatPrice(o.paidAmount)}")
+                    Text(buildString {
+                        append("جمع: ${AppRepository.formatPrice(o.totalAmount)}")
+                        append(" | نقد: ${AppRepository.formatPrice(o.cashReceived)}")
+                        if (o.creditApplied > 0) append(" | اعتبار: ${AppRepository.formatPrice(o.creditApplied)}")
+                    })
                     Text("باقیمانده: ${AppRepository.formatPrice(o.remaining)}", fontWeight = FontWeight.Bold, color = OrangeSecondary)
                     Spacer(modifier = Modifier.height(8.dp))
                     OutlinedTextField(
@@ -211,7 +191,11 @@ private fun OrderCard(
             if (order.deliveredAt != null) Text("تحویل: ${formatTs(order.deliveredAt)}", color = GreenMid)
             order.items.forEach { Text("• ${it.foodName} × ${it.quantity}") }
             Text(
-                "جمع: ${AppRepository.formatPrice(order.totalAmount)} | دریافتی: ${AppRepository.formatPrice(order.paidAmount)}",
+                buildString {
+                    append("جمع: ${AppRepository.formatPrice(order.totalAmount)}")
+                    append(" | نقد: ${AppRepository.formatPrice(order.cashReceived)}")
+                    if (order.creditApplied > 0) append(" | اعتبار: ${AppRepository.formatPrice(order.creditApplied)}")
+                },
                 fontWeight = FontWeight.Bold,
                 color = OrangeSecondary
             )
@@ -223,10 +207,10 @@ private fun OrderCard(
                 if (order.status == OrderStatus.REGISTERED.key) {
                     FilledTonalButton(onClick = { onStatus(OrderStatus.PREPARING.key) }, modifier = Modifier.weight(1f)) { Text("آماده‌سازی") }
                 }
-                if (order.status == OrderStatus.PREPARING.key || order.status == OrderStatus.REGISTERED.key) {
+                if (order.status == OrderStatus.PREPARING.key) {
                     FilledTonalButton(onClick = { onStatus(OrderStatus.SHIPPED.key) }, modifier = Modifier.weight(1f)) { Text("ارسال") }
                 }
-                if (order.status != OrderStatus.DELIVERED.key) {
+                if (order.status == OrderStatus.SHIPPED.key) {
                     Button(onClick = { onStatus(OrderStatus.DELIVERED.key) }, modifier = Modifier.weight(1f)) { Text("تحویل") }
                 }
             }
