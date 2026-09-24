@@ -6,7 +6,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.DeleteForever
 import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.NotificationsActive
@@ -24,7 +23,6 @@ import androidx.compose.ui.unit.sp
 import com.reyhoon.kitchen.data.ApiClient
 import com.reyhoon.kitchen.data.ApiConfig
 import com.reyhoon.kitchen.data.AppRepository
-import com.reyhoon.kitchen.data.SalesPeriod
 import com.reyhoon.kitchen.ui.components.ReyhoonLogo
 import com.reyhoon.kitchen.ui.theme.GreenMid
 import com.reyhoon.kitchen.ui.theme.GreenPrimary
@@ -46,7 +44,7 @@ fun AdminDashboardScreen(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    var selectedPeriod by remember { mutableStateOf(SalesPeriod.TODAY) }
+    var selectedPeriod by remember { mutableStateOf("day") }
     var lastSeenAt by remember { mutableStateOf(System.currentTimeMillis() - 30_000) }
     var pendingCount by remember { mutableIntStateOf(0) }
     var pendingName by remember { mutableStateOf("") }
@@ -74,7 +72,7 @@ fun AdminDashboardScreen(
                     pendingName = fresh.first().customerName
                     lastSeenAt = maxOf(lastSeenAt, fresh.maxOf { it.createdAt })
                 }
-                // اگر آلارم قبلاً acknowledge شده، شمارنده UI را هم پاک کن
+                // اگر آلارم acknowledge شده، بنر را هم بردار
                 if (!NotificationHelper.pendingAlarm) {
                     pendingCount = 0
                 }
@@ -165,14 +163,10 @@ fun AdminDashboardScreen(
 
             Text("گزارش فروش", fontWeight = FontWeight.Bold, fontSize = 18.sp)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                listOf(
-                    SalesPeriod.TODAY to "امروز",
-                    SalesPeriod.WEEK to "هفته",
-                    SalesPeriod.MONTH to "ماه"
-                ).forEach { (p, label) ->
+                listOf("day" to "امروز", "week" to "هفته", "month" to "ماه").forEach { (key, label) ->
                     FilterChip(
-                        selected = selectedPeriod == p,
-                        onClick = { selectedPeriod = p },
+                        selected = selectedPeriod == key,
+                        onClick = { selectedPeriod = key },
                         label = { Text(label) }
                     )
                 }
@@ -187,7 +181,7 @@ fun AdminDashboardScreen(
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        "مانده بدهی سفارش‌ها: ${AppRepository.formatPrice(summary.totalRemaining)} تومان",
+                        "مانده: ${AppRepository.formatPrice(summary.totalDebt)} تومان",
                         color = OrangeSecondary
                     )
                 }
@@ -239,7 +233,7 @@ fun AdminDashboardScreen(
                         scope.launch {
                             showResetConfirm = false
                             if (ApiConfig.isConfigured) {
-                                val ok = ApiClient.resetData()
+                                val ok = ApiClient.resetAllData()
                                 resetMsg = if (ok) "سرور پاک شد" else "خطا در پاک کردن سرور"
                             }
                             AppRepository.orders.clear()
