@@ -46,6 +46,33 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+/** ذخیره و بازیابی کد اشتراک برای «مرا به خاطر داشته باش» */
+object SessionPrefs {
+    private const val PREF = "reyhoon_customer_session"
+    private const val KEY_CODE = "saved_subscription_code"
+    private const val KEY_REMEMBER = "remember_me"
+
+    fun saveCode(ctx: Context, code: String) {
+        ctx.getSharedPreferences(PREF, Context.MODE_PRIVATE).edit()
+            .putString(KEY_CODE, code)
+            .putBoolean(KEY_REMEMBER, true)
+            .apply()
+    }
+
+    fun clear(ctx: Context) {
+        ctx.getSharedPreferences(PREF, Context.MODE_PRIVATE).edit().clear().apply()
+    }
+
+    fun getSavedCode(ctx: Context): String? {
+        val p = ctx.getSharedPreferences(PREF, Context.MODE_PRIVATE)
+        if (!p.getBoolean(KEY_REMEMBER, false)) return null
+        return p.getString(KEY_CODE, null)?.takeIf { it.isNotBlank() }
+    }
+
+    fun isRemembered(ctx: Context): Boolean =
+        ctx.getSharedPreferences(PREF, Context.MODE_PRIVATE).getBoolean(KEY_REMEMBER, false)
+}
+
 class MainActivity : ComponentActivity() {
     private val notifPermission = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -104,17 +131,69 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 fun CustomerApp() {
+    val context = LocalContext.current
     var customer by remember { mutableStateOf<Customer?>(null) }
     var showNewCode by remember { mutableStateOf<String?>(null) }
+    var autoLoginTried by remember { mutableStateOf(false) }
+    var autoLoginLoading by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+
+    // ورود خودکار اگر «مرا به خاطر داشته باش» فعال باشد
+    LaunchedEffect(Unit) {
+        if (autoLoginTried) return@LaunchedEffect
+        autoLoginTried = true
+        val code = SessionPrefs.getSavedCode(context)
+        if (code != null) {
+            autoLoginLoading = true
+            val c = ApiClient.login(code)
+            autoLoginLoading = false
+            if (c != null) {
+                customer = c
+            } else {
+                // کد ذخیره شده دیگر معتبر نیست
+                SessionPrefs.clear(context)
+            }
+        }
+    }
+
     when {
-        customer == null -> WelcomeScreen(onLoggedIn = { customer = it }, onRegistered = { c -> showNewCode = c.subscriptionCode; customer = c })
+        autoLoginLoading -> {
+            Box(Modifier.fillMaxSize().background(Color(0xFFF1F8E9)), contentAlignment = Alignment.Center) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    CircularProgressIndicator(color = Color(0xFF2E7D32))
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text("در حال ورود خودکار...", fontWeight = FontWeight.SemiBold, color = Color(0xFF2E7D32))
+                }
+            }
+        }
+        customer == null -> WelcomeScreen(
+            onLoggedIn = { c ->
+                customer = c
+            },
+            onRegistered = { c ->
+                showNewCode = c.subscriptionCode
+                customer = c
+            }
+        )
         showNewCode != null -> NewCodeDialog(code = showNewCode!!, onDismiss = { showNewCode = null })
-        else -> MainTabs(customer = customer!!, onLogout = { customer = null })
+        else -> MainTabs(
+            customer = customer!!,
+            onLogout = {
+                SessionPrefs.clear(context)
+                customer = null
+            },
+            onCustomerRefresh = { updated -> customer = updated }
+        )
     }
 }
 
 @Composable
 fun NewCodeDialog(code: String, onDismiss: () -> Unit) {
+    val context = LocalContext.current
+    // بعد از ثبت‌نام موفق، کد را ذخیره کن تا دفعه بعد وارد شود
+    LaunchedEffect(code) {
+        if (code.isNotBlank()) SessionPrefs.saveCode(context, code)
+    }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("اشتراک شما ساخته شد", fontWeight = FontWeight.Bold) },
@@ -124,7 +203,7 @@ fun NewCodeDialog(code: String, onDismiss: () -> Unit) {
                 Spacer(modifier = Modifier.height(12.dp))
                 Text(code, fontSize = 28.sp, fontWeight = FontWeight.Bold, color = Color(0xFF2E7D32), textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
                 Spacer(modifier = Modifier.height(8.dp))
-                Text("دفعه بعد با همین کد وارد شوید.")
+                Text("کد ذخیره شد — دفعه بعد خودکار وارد می‌شوید.")
             }
         },
         confirmButton = { Button(onClick = onDismiss) { Text("متوجه شدم — بریم منو") } }
@@ -179,17 +258,63 @@ fun WelcomeScreen(onLoggedIn: (Customer) -> Unit, onRegistered: (Customer) -> Un
 
 @Composable
 fun ExistingLogin(onLoggedIn: (Customer) -> Unit, onBack: () -> Unit) {
+    val context = LocalContext.current
     var code by remember { mutableStateOf("") }
+    var rememberMe by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
     var loading by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+
     Text("ورود با کد اشتراک", fontWeight = FontWeight.Bold, fontSize = 18.sp)
     Spacer(modifier = Modifier.height(12.dp))
-    OutlinedTextField(value = code, onValueChange = { code = it.filter { ch -> ch.isDigit() }; error = null }, label = { Text("کد اشتراک (فقط عدد)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+    OutlinedTextField(
+        value = code,
+        onValueChange = { code = it.filter { ch -> ch.isDigit() }; error = null },
+        label = { Text("کد اشتراک (فقط عدد)") },
+        singleLine = true,
+        modifier = Modifier.fillMaxWidth()
+    )
+    Spacer(modifier = Modifier.height(8.dp))
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Checkbox(
+            checked = rememberMe,
+            onCheckedChange = { rememberMe = it },
+            colors = CheckboxDefaults.colors(checkedColor = Color(0xFF2E7D32))
+        )
+        Text(
+            "مرا به خاطر داشته باش",
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.padding(start = 4.dp)
+        )
+    }
     error?.let { Text(it, color = Color(0xFFC62828), fontWeight = FontWeight.Bold) }
     Spacer(modifier = Modifier.height(12.dp))
-    Button(onClick = { scope.launch { loading = true; val c = ApiClient.login(code); loading = false; if (c != null) onLoggedIn(c) else error = "کد یافت نشد" } }, enabled = code.isNotBlank() && !loading, modifier = Modifier.fillMaxWidth().height(50.dp)) {
-        if (loading) CircularProgressIndicator(modifier = Modifier.size(22.dp), color = Color.White) else Text("ورود", fontWeight = FontWeight.Bold)
+    Button(
+        onClick = {
+            scope.launch {
+                loading = true
+                val c = ApiClient.login(code)
+                loading = false
+                if (c != null) {
+                    if (rememberMe) {
+                        SessionPrefs.saveCode(context, code)
+                    } else {
+                        SessionPrefs.clear(context)
+                    }
+                    onLoggedIn(c)
+                } else {
+                    error = "کد یافت نشد"
+                }
+            }
+        },
+        enabled = code.isNotBlank() && !loading,
+        modifier = Modifier.fillMaxWidth().height(50.dp)
+    ) {
+        if (loading) CircularProgressIndicator(modifier = Modifier.size(22.dp), color = Color.White)
+        else Text("ورود", fontWeight = FontWeight.Bold)
     }
     TextButton(onClick = onBack) { Text("بازگشت") }
 }
@@ -220,14 +345,32 @@ fun NewRegister(onRegistered: (Customer) -> Unit, onBack: () -> Unit) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MainTabs(customer: Customer, onLogout: () -> Unit) {
+fun MainTabs(customer: Customer, onLogout: () -> Unit, onCustomerRefresh: (Customer) -> Unit = {}) {
     var tab by remember { mutableIntStateOf(0) }
+    var showLogoutConfirm by remember { mutableStateOf(false) }
+
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Column { Text("سلام ${customer.name}", fontWeight = FontWeight.Bold); Text("کد: ${customer.subscriptionCode ?: "—"} | بدهی: ${fmt(customer.debt)}", style = MaterialTheme.typography.bodySmall) } },
-                actions = { IconButton(onClick = onLogout) { Icon(Icons.AutoMirrored.Filled.Logout, null) } },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color(0xFF2E7D32), titleContentColor = Color.White, actionIconContentColor = Color.White)
+                title = {
+                    Column {
+                        Text("سلام ${customer.name}", fontWeight = FontWeight.Bold)
+                        Text(
+                            "کد: ${customer.subscriptionCode ?: "—"} | بدهی: ${fmt(customer.debt)}",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                },
+                actions = {
+                    IconButton(onClick = { showLogoutConfirm = true }) {
+                        Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = "خروج")
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = Color(0xFF2E7D32),
+                    titleContentColor = Color.White,
+                    actionIconContentColor = Color.White
+                )
             )
         },
         bottomBar = {
@@ -238,8 +381,33 @@ fun MainTabs(customer: Customer, onLogout: () -> Unit) {
         }
     ) { padding ->
         Box(modifier = Modifier.padding(padding)) {
-            when (tab) { 0 -> MenuOrderTab(customer); 1 -> OrdersTab(customer) }
+            when (tab) {
+                0 -> MenuOrderTab(customer)
+                1 -> OrdersTab(customer)
+            }
         }
+    }
+
+    if (showLogoutConfirm) {
+        AlertDialog(
+            onDismissRequest = { showLogoutConfirm = false },
+            title = { Text("خروج از حساب", fontWeight = FontWeight.Bold) },
+            text = {
+                Text("با خروج، دفعه بعد باید دوباره کد اشتراک را وارد کنید.\nآیا مطمئن هستید؟")
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showLogoutConfirm = false
+                        onLogout()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC62828))
+                ) { Text("خروج") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showLogoutConfirm = false }) { Text("انصراف") }
+            }
+        )
     }
 }
 
