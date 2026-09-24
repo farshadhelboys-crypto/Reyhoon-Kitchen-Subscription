@@ -26,7 +26,7 @@ object NotificationHelper {
     @Volatile
     private var activeRingtone: Ringtone? = null
 
-    /** تا وقتی کاربر صفحه سفارش آنلاین را باز نکند true می‌ماند */
+    /** تا وقتی کاربر صفحه سفارش را باز نکند / وضعیت را عوض نکند true می‌ماند */
     @Volatile
     var pendingAlarm: Boolean = false
         private set
@@ -44,7 +44,7 @@ object NotificationHelper {
 
         nm.createNotificationChannel(
             NotificationChannel(CHANNEL_ORDERS, "سفارش جدید ریحون", NotificationManager.IMPORTANCE_HIGH).apply {
-                description = "تا باز کردن سفارش آنلاین ادامه دارد"
+                description = "تا باز کردن صفحه سفارش‌ها یا تغییر وضعیت ادامه دارد"
                 enableVibration(true)
                 vibrationPattern = longArrayOf(0, 400, 200, 400)
                 setSound(soundUri, attrs)
@@ -56,23 +56,22 @@ object NotificationHelper {
     }
 
     /**
-     * سفارش‌های تازه را ثبت می‌کند و آلارم را روشن نگه می‌دارد
-     * تا وقتی [acknowledgeOrdersViewed] صدا شود.
+     * فقط برای سفارش‌های واقعاً جدید آلارم می‌زند (یک‌بار).
+     * تکرار polling دیگر صدا را دوباره پخش نمی‌کند.
      */
     fun onNewOrdersDetected(context: Context, orderIds: List<String>, customerName: String = ""): Int {
         val fresh = orderIds.filter { it.isNotBlank() && it !in knownOrderIds }
-        if (fresh.isEmpty() && !pendingAlarm) return 0
+        // فقط برای سفارش واقعاً جدید آلارم بزن — تکرار نکن
+        if (fresh.isEmpty()) return 0
         knownOrderIds.addAll(fresh)
-        if (fresh.isNotEmpty()) pendingAlarm = true
-
-        if (!pendingAlarm) return 0
+        pendingAlarm = true
 
         ensureChannels(context)
         val title = "سفارش آنلاین جدید!"
         val body = if (customerName.isNotBlank()) {
-            "$customerName — برای قطع آلارم سفارش آنلاین را باز کنید"
+            "$customerName — برای قطع آلارم سفارش‌ها را باز کنید"
         } else {
-            "برای قطع آلارم، سفارش‌های آنلاین را باز کنید"
+            "برای قطع آلارم، صفحه سفارش‌ها را باز کنید"
         }
 
         val open = Intent(context, MainActivity::class.java).apply {
@@ -91,8 +90,9 @@ object NotificationHelper {
             .setStyle(NotificationCompat.BigTextStyle().bigText("$title\n$body"))
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setCategory(NotificationCompat.CATEGORY_ALARM)
-            .setOngoing(true) // تا باز کردن صفحه قطع نشود
+            .setOngoing(true)
             .setAutoCancel(false)
+            .setOnlyAlertOnce(true) // صدا فقط بار اول
             .setContentIntent(pi)
             .setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION))
             .setVibrate(longArrayOf(0, 400, 200, 400))
@@ -107,7 +107,7 @@ object NotificationHelper {
         return fresh.size
     }
 
-    /** فقط وقتی صفحه سفارش آنلاین باز شد */
+    /** قطع کامل آلارم — با باز شدن صفحه سفارش‌ها یا تغییر وضعیت */
     fun acknowledgeOrdersViewed(context: Context) {
         pendingAlarm = false
         stopSoundAndNotif(context)
@@ -135,13 +135,13 @@ object NotificationHelper {
         onNewOrdersDetected(context, orderIds, customerName)
 
     fun notifyNewOrder(context: Context, count: Int, customerName: String = "") {
-        onNewOrdersDetected(context, listOf("batch-${System.currentTimeMillis()}"), customerName)
+        // یک شناسه پایدار برای این دسته تا هر بار دوباره آلارم نسازد
+        onNewOrdersDetected(context, listOf("batch-$count-$customerName"), customerName)
     }
 
     fun stopAlarm(context: Context) {
-        // عمداً فقط صدا را قطع نمی‌کند مگر acknowledge
-        // برای سازگاری با کد قدیمی: اگر pending نباشد قطع کن
-        if (!pendingAlarm) stopSoundAndNotif(context)
+        pendingAlarm = false
+        stopSoundAndNotif(context)
     }
 
     fun notifyStatus(context: Context, title: String, body: String) {
