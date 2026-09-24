@@ -34,9 +34,7 @@ data class FoodItem(
     val price: Long,
     val category: String = "عمومی",
     val isAvailable: Boolean = true,
-    /** قیمت هر سیخ اضافه؛ ۰ یعنی این گزینه برای این غذا فعال نیست */
     val extraSkewerPrice: Long = 0L,
-    /** economy = اقتصادی | regular = غیر اقتصادی */
     val priceTier: String = "regular"
 ) {
     val isEconomy: Boolean get() = priceTier == "economy"
@@ -57,9 +55,12 @@ data class OrderItem(
     val foodId: String,
     val foodName: String,
     val unitPrice: Long,
-    val quantity: Int = 1
+    val quantity: Int = 1,
+    /** economy | regular — از منوی اقتصادی / غیر اقتصادی */
+    val priceTier: String = "regular"
 ) {
     val total: Long get() = unitPrice * quantity
+    val priceTierLabel: String get() = if (priceTier == "economy") "اقتصادی" else "غیر اقتصادی"
 }
 
 enum class OrderStatus(val key: String, val labelFa: String) {
