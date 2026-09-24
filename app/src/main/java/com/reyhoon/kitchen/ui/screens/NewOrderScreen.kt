@@ -8,6 +8,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -26,19 +27,15 @@ import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun NewOrderScreen(
-    onBack: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val customers = AppRepository.customers
-    val menu = AppRepository.menuItems.filter { it.isAvailable }
-    val scope = rememberCoroutineScope()
-
+fun NewOrderScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
+    var query by remember { mutableStateOf("") }
     var selectedCustomer by remember { mutableStateOf<Customer?>(null) }
+    var menu by remember { mutableStateOf(AppRepository.menuItems.filter { it.isAvailable }) }
     var quantities by remember { mutableStateOf<Map<String, Int>>(emptyMap()) }
     var paidNow by remember { mutableStateOf("") }
     var resultMessage by remember { mutableStateOf<String?>(null) }
     var saving by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
 
     val cartItems = remember(quantities, menu) {
         menu.mapNotNull { food ->
@@ -50,14 +47,37 @@ fun NewOrderScreen(
     val customerCredit = selectedCustomer?.credit ?: 0L
     val afterCredit = (total - customerCredit).coerceAtLeast(0)
 
+    LaunchedEffect(Unit) {
+        if (ApiConfig.isConfigured) {
+            val remote = ApiClient.fetchMenu()
+            if (remote.isNotEmpty()) {
+                AppRepository.menuItems.clear()
+                AppRepository.menuItems.addAll(remote)
+                menu = remote.filter { it.isAvailable }
+            }
+            val customers = ApiClient.fetchCustomers()
+            if (customers.isNotEmpty()) {
+                AppRepository.customers.clear()
+                AppRepository.customers.addAll(customers)
+            }
+        }
+    }
+
+    val filtered = remember(query) {
+        val q = query.trim()
+        if (q.isBlank()) AppRepository.customers.take(20)
+        else AppRepository.customers.filter {
+            it.name.contains(q, true) || it.phone.contains(q) ||
+                (it.subscriptionCode?.contains(q) == true)
+        }.take(20)
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("ثبت سفارش جدید", fontWeight = FontWeight.Bold) },
+                title = { Text("سفارش دستی (تلفنی)", fontWeight = FontWeight.Bold) },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "بازگشت")
-                    }
+                    IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "بازگشت") }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = GreenPrimary,
@@ -68,182 +88,202 @@ fun NewOrderScreen(
         },
         modifier = modifier
     ) { padding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .padding(16.dp)
-        ) {
-            Text("انتخاب مشتری", fontWeight = FontWeight.SemiBold)
-            Spacer(modifier = Modifier.height(8.dp))
-            if (customers.isEmpty()) {
-                Text("ابتدا مشتری اضافه کنید.", color = MaterialTheme.colorScheme.error)
-            } else {
-                var expanded by remember { mutableStateOf(false) }
-                ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }) {
-                    OutlinedTextField(
-                        value = selectedCustomer?.let {
-                            buildString {
-                                append(it.name)
-                                if (it.credit > 0) append(" | اعتبار: ${AppRepository.formatPrice(it.credit)}")
-                                if (it.debt > 0) append(" | بدهی: ${AppRepository.formatPrice(it.debt)}")
-                            }
-                        } ?: "انتخاب کنید",
-                        onValueChange = {},
-                        readOnly = true,
-                        modifier = Modifier.menuAnchor().fillMaxWidth(),
-                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) }
-                    )
-                    ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                        customers.forEach { c ->
-                            DropdownMenuItem(
-                                text = {
-                                    Column {
-                                        Text("${c.name} (${c.phone})")
-                                        if (c.credit > 0) {
-                                            Text(
-                                                "اعتبار: ${AppRepository.formatPrice(c.credit)} تومان",
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = GreenPrimary
-                                            )
-                                        }
-                                        if (c.debt > 0) {
-                                            Text(
-                                                "بدهی: ${AppRepository.formatPrice(c.debt)} تومان",
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.error
-                                            )
-                                        }
-                                    }
-                                },
-                                onClick = {
-                                    selectedCustomer = c
-                                    expanded = false
+        Column(Modifier = Modifier.fillMaxSize().padding(padding).padding(16.dp)) {
+            if (selectedCustomer == null) {
+                OutlinedTextField(
+                    value = query,
+                    onValueChange = { query = it },
+                    label = { Text("جستجوی مشتری (نام / تلفن / کد)") },
+                    leadingIcon = { Icon(Icons.Default.Search, null) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    items(filtered, key = { it.id }) { c ->
+                        Card(
+                            onClick = { selectedCustomer = c },
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(modifier = Modifier.padding(12.dp)) {
+                                Text(c.name, fontWeight = FontWeight.SemiBold)
+                                Text("تلفن: ${c.phone} | کد: ${c.subscriptionCode ?: "—"}")
+                                if (c.debt > 0) {
+                                    Text(
+                                        "بدهی: ${AppRepository.formatPrice(c.debt)} تومان",
+                                        color = MaterialTheme.colorScheme.error,
+                                        fontWeight = FontWeight.Bold
+                                    )
                                 }
+                            }
+                        }
+                    }
+                }
+            } else {
+                val c = selectedCustomer!!
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = GreenPrimary.copy(alpha = 0.1f)),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(c.name, fontWeight = FontWeight.Bold)
+                            Text("کد: ${c.subscriptionCode ?: "—"} | تلفن: ${c.phone}")
+                            if (customerCredit > 0) {
+                                Text(
+                                    "این مشتری ${AppRepository.formatPrice(customerCredit)} تومان اعتبار دارد و از مبلغ سفارش کسر می‌شود.",
+                                    color = GreenPrimary,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
+                        }
+                        TextButton(onClick = { selectedCustomer = null; quantities = emptyMap(); paidNow = "" }) {
+                            Text("تغییر")
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.height(10.dp))
+                Text("انتخاب غذا", fontWeight = FontWeight.SemiBold)
+                LazyColumn(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    items(menu, key = { it.id }) { food ->
+                        Card(shape = RoundedCornerShape(10.dp)) {
+                            Row(
+                                modifier = Modifier.padding(10.dp).fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(food.name, fontWeight = FontWeight.Medium)
+                                    Text(
+                                        "${AppRepository.formatPrice(food.price)} تومان",
+                                        color = OrangeSecondary,
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                }
+                                val qty = quantities[food.id] ?: 0
+                                IconButton(onClick = {
+                                    quantities = quantities.toMutableMap().apply {
+                                        if (qty <= 1) remove(food.id) else put(food.id, qty - 1)
+                                    }
+                                }, enabled = qty > 0) { Icon(Icons.Default.Remove, null) }
+                                Text("$qty", fontWeight = FontWeight.Bold, modifier = Modifier.width(24.dp))
+                                IconButton(onClick = {
+                                    quantities = quantities.toMutableMap().apply { put(food.id, qty + 1) }
+                                }) { Icon(Icons.Default.Add, null) }
+                            }
+                        }
+                    }
+                }
+
+                if (total > 0) {
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                    Text(
+                        "جمع غذا: ${AppRepository.formatPrice(total)} تومان",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = OrangeSecondary
+                    )
+                    if (customerCredit > 0) {
+                        Text(
+                            "پس از کسر اعتبار: ${AppRepository.formatPrice(afterCredit)} تومان",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = GreenPrimary
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text("برای پر کردن فیلد روی مبلغ بزنید:", style = MaterialTheme.typography.bodySmall)
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FilterChip(
+                            selected = paidNow == afterCredit.toString(),
+                            onClick = { paidNow = afterCredit.toString() },
+                            label = {
+                                Text(
+                                    "قابل پرداخت: ${AppRepository.formatPrice(afterCredit)}",
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        )
+                        FilterChip(
+                            selected = paidNow == "0",
+                            onClick = { paidNow = "0" },
+                            label = { Text("نسیه (۰)") }
+                        )
+                        if (total != afterCredit) {
+                            FilterChip(
+                                selected = paidNow == total.toString(),
+                                onClick = { paidNow = total.toString() },
+                                label = { Text("کل: ${AppRepository.formatPrice(total)}") }
                             )
                         }
                     }
-                }
-            }
-
-            if (selectedCustomer != null && customerCredit > 0) {
-                Spacer(modifier = Modifier.height(8.dp))
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = GreenPrimary.copy(alpha = 0.12f)),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Text(
-                        "این مشتری ${AppRepository.formatPrice(customerCredit)} تومان اعتبار دارد و از مبلغ سفارش کسر می‌شود.",
-                        modifier = Modifier.padding(12.dp),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = GreenPrimary
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-            Text("انتخاب غذاها", fontWeight = FontWeight.SemiBold)
-            Spacer(modifier = Modifier.height(8.dp))
-
-            LazyColumn(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                items(menu, key = { it.id }) { food ->
-                    FoodQtyRow(
-                        food = food,
-                        qty = quantities[food.id] ?: 0,
-                        onChange = { newQty ->
-                            quantities = quantities.toMutableMap().apply {
-                                if (newQty <= 0) remove(food.id) else put(food.id, newQty)
-                            }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = paidNow,
+                        onValueChange = { paidNow = it.filter { c -> c.isDigit() } },
+                        label = { Text("مبلغ دریافتی از مشتری (تومان)") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        supportingText = {
+                            Text("می‌توانید بیشتر از مبلغ وارد کنید → مازاد به‌عنوان اعتبار مشتری ذخیره می‌شود")
                         }
                     )
-                }
-            }
-
-            if (total > 0) {
-                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-                Text(
-                    "جمع غذا: ${AppRepository.formatPrice(total)} تومان",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = OrangeSecondary
-                )
-                if (customerCredit > 0) {
-                    Text(
-                        "پس از کسر اعتبار: ${AppRepository.formatPrice(afterCredit)} تومان",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = GreenPrimary
-                    )
-                }
-                Spacer(modifier = Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = paidNow,
-                    onValueChange = { paidNow = it.filter { c -> c.isDigit() } },
-                    label = { Text("مبلغ دریافتی از مشتری (تومان)") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                    supportingText = {
-                        Text("می‌توانید بیشتر از مبلغ وارد کنید → مازاد به‌عنوان اعتبار مشتری ذخیره می‌شود")
-                    }
-                )
-                Spacer(modifier = Modifier.height(12.dp))
-                Button(
-                    onClick = {
-                        val c = selectedCustomer ?: return@Button
-                        val paid = paidNow.toLongOrNull() ?: 0L
-                        scope.launch {
-                            saving = true
-                            // ۱) محلی
-                            val result = AppRepository.createOrder(c, cartItems, paid)
-                            // ۲) سرور — تا در ادمین و اپ مشتری دیده شود
-                            var serverOk = false
-                            if (ApiConfig.isConfigured) {
-                                val remote = ApiClient.createOrder(
-                                    customerId = c.id,
-                                    items = cartItems,
-                                    paidNow = paid,
-                                    note = result.order.note,
-                                    source = "kitchen"
-                                )
-                                if (remote != null) {
-                                    serverOk = true
-                                    val idx = AppRepository.orders.indexOfFirst { it.id == result.order.id }
-                                    if (idx >= 0) {
-                                        AppRepository.orders[idx] = remote.copy(
-                                            customerPhone = remote.customerPhone.ifBlank { c.phone },
-                                            customerAddress = remote.customerAddress.ifBlank { c.address.fullAddress() }
-                                        )
-                                    } else {
-                                        AppRepository.orders.add(0, remote)
-                                    }
-                                    val refreshed = ApiClient.fetchCustomerByCode(c.subscriptionCode ?: "")
-                                    if (refreshed != null) {
-                                        AppRepository.updateCustomer(refreshed)
-                                        selectedCustomer = refreshed
-                                    }
-                                }
-                            }
-                            resultMessage = buildString {
-                                append(result.message)
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Button(
+                        onClick = {
+                            val cust = selectedCustomer ?: return@Button
+                            val paid = paidNow.toLongOrNull() ?: 0L
+                            scope.launch {
+                                saving = true
+                                val result = AppRepository.createOrder(cust, cartItems, paid)
+                                var serverOk = false
                                 if (ApiConfig.isConfigured) {
-                                    append(if (serverOk) "\n✓ روی سرور هم ذخیره شد — در ادمین و اپ مشتری دیده می‌شود." else "\n⚠ فقط محلی ذخیره شد (اتصال سرور برقرار نبود).")
+                                    val remote = ApiClient.createOrder(
+                                        customerId = cust.id,
+                                        items = cartItems,
+                                        paidNow = paid,
+                                        note = result.order.note,
+                                        source = "kitchen"
+                                    )
+                                    if (remote != null) {
+                                        serverOk = true
+                                        val idx = AppRepository.orders.indexOfFirst { it.id == result.order.id }
+                                        if (idx >= 0) {
+                                            AppRepository.orders[idx] = remote.copy(
+                                                customerPhone = remote.customerPhone.ifBlank { cust.phone },
+                                                customerAddress = remote.customerAddress.ifBlank { cust.address.fullAddress() }
+                                            )
+                                        } else {
+                                            AppRepository.orders.add(0, remote)
+                                        }
+                                        val refreshed = ApiClient.fetchCustomerByCode(cust.subscriptionCode ?: "")
+                                        if (refreshed != null) {
+                                            AppRepository.updateCustomer(refreshed)
+                                            selectedCustomer = refreshed
+                                        }
+                                    }
                                 }
+                                resultMessage = buildString {
+                                    append(result.message)
+                                    if (ApiConfig.isConfigured) {
+                                        append(if (serverOk) "\n✓ روی سرور ذخیره شد" else "\n⚠ ممکن است روی سرور ذخیره نشده باشد")
+                                    }
+                                }
+                                quantities = emptyMap()
+                                paidNow = ""
+                                saving = false
                             }
-                            quantities = emptyMap()
-                            paidNow = ""
-                            saving = false
-                        }
-                    },
-                    modifier = Modifier.fillMaxWidth().height(50.dp),
-                    enabled = selectedCustomer != null && cartItems.isNotEmpty() && !saving,
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    if (saving) {
-                        CircularProgressIndicator(modifier = Modifier.size(22.dp), color = MaterialTheme.colorScheme.onPrimary, strokeWidth = 2.dp)
-                    } else {
-                        Text("ثبت سفارش (محلی + سرور)", fontWeight = FontWeight.Bold)
+                        },
+                        modifier = Modifier.fillMaxWidth().height(52.dp),
+                        enabled = cartItems.isNotEmpty() && !saving,
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        if (saving) CircularProgressIndicator(modifier = Modifier.size(22.dp), color = MaterialTheme.colorScheme.onPrimary)
+                        else Text("ثبت سفارش", fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -252,44 +292,12 @@ fun NewOrderScreen(
 
     resultMessage?.let { msg ->
         AlertDialog(
-            onDismissRequest = {
-                resultMessage = null
-                onBack()
-            },
-            title = { Text("نتیجه ثبت سفارش") },
+            onDismissRequest = { resultMessage = null },
+            title = { Text("نتیجه") },
             text = { Text(msg) },
             confirmButton = {
-                Button(onClick = {
-                    resultMessage = null
-                    onBack()
-                }) { Text("باشه") }
+                Button(onClick = { resultMessage = null; onBack() }) { Text("باشه") }
             }
         )
-    }
-}
-
-@Composable
-private fun FoodQtyRow(food: FoodItem, qty: Int, onChange: (Int) -> Unit) {
-    Card(shape = RoundedCornerShape(10.dp)) {
-        Row(
-            modifier = Modifier.padding(12.dp).fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(food.name, fontWeight = FontWeight.Medium)
-                Text(
-                    "${AppRepository.formatPrice(food.price)} تومان",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = OrangeSecondary
-                )
-            }
-            IconButton(onClick = { onChange(qty - 1) }, enabled = qty > 0) {
-                Icon(Icons.Default.Remove, null)
-            }
-            Text("$qty", fontWeight = FontWeight.Bold, modifier = Modifier.width(24.dp))
-            IconButton(onClick = { onChange(qty + 1) }) {
-                Icon(Icons.Default.Add, null)
-            }
-        }
     }
 }
