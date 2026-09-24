@@ -23,7 +23,15 @@ data class OrderItem(val foodId: String, val foodName: String, val unitPrice: Lo
 data class Order(
     val id: String, val items: List<OrderItem>, val totalAmount: Long, val paidAmount: Long,
     val status: String, val createdAt: Long, val deliveredAt: Long?, val rated: Boolean = false
-)
+) {
+    val statusFa: String get() = when (status) {
+        "registered" -> "سفارش ثبت شد"
+        "preparing" -> "در حال آماده‌سازی"
+        "shipped" -> "ارسال شده"
+        "delivered" -> "تحویل داده شد"
+        else -> status
+    }
+}
 
 object ApiClient {
     private fun conn(path: String, method: String): HttpURLConnection {
@@ -49,6 +57,8 @@ object ApiClient {
         c.setRequestProperty("Content-Type", "application/json; charset=utf-8")
         OutputStreamWriter(c.outputStream, Charsets.UTF_8).use { it.write(body.toString()) }
     }
+
+    suspend fun login(code: String): Customer? = loginByCode(code)
 
     suspend fun loginByCode(code: String): Customer? = withContext(Dispatchers.IO) {
         if (!ApiConfig.isConfigured) return@withContext null
