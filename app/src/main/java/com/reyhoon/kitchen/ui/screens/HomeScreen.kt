@@ -267,7 +267,7 @@ fun HomeScreen(
     }
 
     payOrder?.let { o ->
-        var amount by remember { mutableStateOf("") }
+        var amount by remember(o.id) { mutableStateOf(o.remaining.toString()) }
         AlertDialog(
             onDismissRequest = { payOrder = null },
             title = { Text("ثبت دریافت — ${o.customerName}") },
@@ -275,13 +275,35 @@ fun HomeScreen(
                 Column {
                     Text("جمع: ${AppRepository.formatPrice(o.totalAmount)}")
                     Text("دریافتی قبلی: ${AppRepository.formatPrice(o.paidAmount)}")
-                    Text("باقیمانده: ${AppRepository.formatPrice(o.remaining)}", fontWeight = FontWeight.Bold, color = OrangeSecondary)
                     Spacer(modifier = Modifier.height(8.dp))
+                    Text("برای پر کردن فیلد، روی مبلغ بزنید:", style = MaterialTheme.typography.bodySmall)
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FilterChip(
+                            selected = amount == o.remaining.toString(),
+                            onClick = { amount = o.remaining.toString() },
+                            label = {
+                                Text(
+                                    "باقیمانده: ${AppRepository.formatPrice(o.remaining)}",
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        )
+                        if (o.totalAmount != o.remaining) {
+                            FilterChip(
+                                selected = amount == o.totalAmount.toString(),
+                                onClick = { amount = o.totalAmount.toString() },
+                                label = { Text("کل سفارش: ${AppRepository.formatPrice(o.totalAmount)}") }
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(10.dp))
                     OutlinedTextField(
                         value = amount,
                         onValueChange = { amount = it.filter { ch -> ch.isDigit() } },
                         label = { Text("مبلغ دریافتی (تومان)") },
-                        singleLine = true
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
                     )
                 }
             },
