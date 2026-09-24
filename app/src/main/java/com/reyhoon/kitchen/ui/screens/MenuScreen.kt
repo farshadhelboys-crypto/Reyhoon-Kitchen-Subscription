@@ -20,6 +20,7 @@ import com.reyhoon.kitchen.data.ApiConfig
 import com.reyhoon.kitchen.data.AppRepository
 import com.reyhoon.kitchen.data.MenuCategories
 import com.reyhoon.kitchen.data.OrderItem
+import com.reyhoon.kitchen.data.PriceTiers
 import com.reyhoon.kitchen.ui.theme.GreenPrimary
 import com.reyhoon.kitchen.ui.theme.OrangeSecondary
 import kotlinx.coroutines.launch
@@ -122,61 +123,74 @@ fun MenuScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                             )
                         }
                     }
-                    items(list, key = { it.id }) { food ->
-                        Card(shape = RoundedCornerShape(10.dp)) {
-                            Column(modifier = Modifier.padding(12.dp).fillMaxWidth()) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Text(MenuCategories.emoji(food.category), fontSize = 22.sp)
-                                    Spacer(modifier = Modifier.width(10.dp))
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(food.name, fontWeight = FontWeight.Medium)
-                                        Text(
-                                            "${AppRepository.formatPrice(food.price)} تومان",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = OrangeSecondary
-                                        )
-                                    }
-                                    val qty = quantities[food.id] ?: 0
-                                    IconButton(
-                                        onClick = {
-                                            quantities = quantities.toMutableMap().apply {
-                                                if (qty <= 1) remove(food.id) else put(food.id, qty - 1)
+                    listOf(PriceTiers.ECONOMY, PriceTiers.REGULAR).forEach { tier ->
+                        val tierList = list.filter { it.priceTier == tier }
+                        if (tierList.isNotEmpty()) {
+                            item(key = cat + "_" + tier + "_h") {
+                                Text(
+                                    PriceTiers.label(tier),
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = OrangeSecondary,
+                                    modifier = Modifier.padding(top = 2.dp)
+                                )
+                            }
+                            items(tierList, key = { it.id }) { food ->
+                                Card(shape = RoundedCornerShape(10.dp)) {
+                                    Column(modifier = Modifier.padding(12.dp).fillMaxWidth()) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Text(MenuCategories.emoji(food.category), fontSize = 22.sp)
+                                            Spacer(modifier = Modifier.width(10.dp))
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Text(food.name, fontWeight = FontWeight.Medium)
+                                                Text(
+                                                    "${AppRepository.formatPrice(food.price)} تومان",
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = OrangeSecondary
+                                                )
                                             }
-                                        },
-                                        enabled = qty > 0
-                                    ) { Icon(Icons.Default.Remove, null) }
-                                    Text("$qty", fontWeight = FontWeight.Bold, modifier = Modifier.width(28.dp))
-                                    IconButton(onClick = {
-                                        quantities = quantities.toMutableMap().apply { put(food.id, qty + 1) }
-                                    }) { Icon(Icons.Default.Add, null) }
-                                }
-                                if (food.extraSkewerPrice > 0) {
-                                    Spacer(modifier = Modifier.height(6.dp))
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Text("🍢", fontSize = 18.sp)
-                                        Spacer(modifier = Modifier.width(8.dp))
-                                        Column(modifier = Modifier.weight(1f)) {
-                                            Text("سیخ اضافه", fontWeight = FontWeight.Medium)
-                                            Text(
-                                                "${AppRepository.formatPrice(food.extraSkewerPrice)} تومان",
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = OrangeSecondary
-                                            )
+                                            val qty = quantities[food.id] ?: 0
+                                            IconButton(
+                                                onClick = {
+                                                    quantities = quantities.toMutableMap().apply {
+                                                        if (qty <= 1) remove(food.id) else put(food.id, qty - 1)
+                                                    }
+                                                },
+                                                enabled = qty > 0
+                                            ) { Icon(Icons.Default.Remove, null) }
+                                            Text("$qty", fontWeight = FontWeight.Bold, modifier = Modifier.width(28.dp))
+                                            IconButton(onClick = {
+                                                quantities = quantities.toMutableMap().apply { put(food.id, qty + 1) }
+                                            }) { Icon(Icons.Default.Add, null) }
                                         }
-                                        val skKey = "${food.id}__skewer"
-                                        val sq = quantities[skKey] ?: 0
-                                        IconButton(
-                                            onClick = {
-                                                quantities = quantities.toMutableMap().apply {
-                                                    if (sq <= 1) remove(skKey) else put(skKey, sq - 1)
+                                        if (food.extraSkewerPrice > 0) {
+                                            Spacer(modifier = Modifier.height(6.dp))
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Text("🍢", fontSize = 18.sp)
+                                                Spacer(modifier = Modifier.width(8.dp))
+                                                Column(modifier = Modifier.weight(1f)) {
+                                                    Text("سیخ اضافه", fontWeight = FontWeight.Medium)
+                                                    Text(
+                                                        "${AppRepository.formatPrice(food.extraSkewerPrice)} تومان",
+                                                        style = MaterialTheme.typography.bodySmall,
+                                                        color = OrangeSecondary
+                                                    )
                                                 }
-                                            },
-                                            enabled = sq > 0
-                                        ) { Icon(Icons.Default.Remove, null) }
-                                        Text("$sq", fontWeight = FontWeight.Bold, modifier = Modifier.width(28.dp))
-                                        IconButton(onClick = {
-                                            quantities = quantities.toMutableMap().apply { put(skKey, sq + 1) }
-                                        }) { Icon(Icons.Default.Add, null) }
+                                                val skKey = "${food.id}__skewer"
+                                                val sq = quantities[skKey] ?: 0
+                                                IconButton(
+                                                    onClick = {
+                                                        quantities = quantities.toMutableMap().apply {
+                                                            if (sq <= 1) remove(skKey) else put(skKey, sq - 1)
+                                                        }
+                                                    },
+                                                    enabled = sq > 0
+                                                ) { Icon(Icons.Default.Remove, null) }
+                                                Text("$sq", fontWeight = FontWeight.Bold, modifier = Modifier.width(28.dp))
+                                                IconButton(onClick = {
+                                                    quantities = quantities.toMutableMap().apply { put(skKey, sq + 1) }
+                                                }) { Icon(Icons.Default.Add, null) }
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -219,13 +233,6 @@ fun MenuScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                         onClick = { paidNow = "0" },
                         label = { Text("نسیه (۰)") }
                     )
-                    if (total != afterCredit) {
-                        FilterChip(
-                            selected = paidNow == total.toString(),
-                            onClick = { paidNow = total.toString() },
-                            label = { Text("کل: ${AppRepository.formatPrice(total)}") }
-                        )
-                    }
                 }
                 Spacer(modifier = Modifier.height(8.dp))
                 OutlinedTextField(
