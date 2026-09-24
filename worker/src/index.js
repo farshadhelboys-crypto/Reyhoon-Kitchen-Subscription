@@ -1,6 +1,7 @@
 /**
  * Reyhoon API — accounting fixed (debt = sum of order remainings only)
  * DELETE customer, admin reset, address/phone on orders
+ * Menu items support extraSkewerPrice for kebab category
  */
 var CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -77,6 +78,7 @@ async function handleRequest(request) {
       var item = {
         id: uid(), name: body.name || "", description: body.description || "",
         price: Number(body.price) || 0, category: body.category || "عمومی",
+        extraSkewerPrice: Number(body.extraSkewerPrice) || 0,
         isAvailable: body.isAvailable !== false
       };
       menu.push(item);
