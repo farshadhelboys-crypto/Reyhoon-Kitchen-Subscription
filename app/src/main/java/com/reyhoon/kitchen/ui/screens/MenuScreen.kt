@@ -25,10 +25,6 @@ import com.reyhoon.kitchen.ui.theme.GreenPrimary
 import com.reyhoon.kitchen.ui.theme.OrangeSecondary
 import kotlinx.coroutines.launch
 
-/**
- * ثبت سفارش دستی برای مشتری که با کد اشتراک وارد شده
- * (مخصوص حضور حضوری مشتری در آشپزخانه)
- */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MenuScreen(
@@ -156,12 +152,7 @@ fun MenuScreen(
                                 ) {
                                     Text(MenuCategories.emoji(cat), fontSize = 26.sp)
                                     Spacer(modifier = Modifier.width(10.dp))
-                                    Text(
-                                        cat,
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 17.sp,
-                                        color = GreenPrimary
-                                    )
+                                    Text(cat, fontWeight = FontWeight.Bold, fontSize = 17.sp, color = GreenPrimary)
                                 }
                             }
                         }
@@ -192,9 +183,7 @@ fun MenuScreen(
                                     ) { Icon(Icons.Default.Remove, null) }
                                     Text("$qty", fontWeight = FontWeight.Bold, modifier = Modifier.width(28.dp))
                                     IconButton(onClick = {
-                                        quantities = quantities.toMutableMap().apply {
-                                            put(food.id, qty + 1)
-                                        }
+                                        quantities = quantities.toMutableMap().apply { put(food.id, qty + 1) }
                                     }) { Icon(Icons.Default.Add, null) }
                                 }
                             }
@@ -217,6 +206,33 @@ fun MenuScreen(
                         color = GreenPrimary,
                         fontWeight = FontWeight.SemiBold
                     )
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                Text("برای پر کردن فیلد روی مبلغ بزنید:", style = MaterialTheme.typography.bodySmall)
+                Spacer(modifier = Modifier.height(6.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilterChip(
+                        selected = paidNow == afterCredit.toString(),
+                        onClick = { paidNow = afterCredit.toString() },
+                        label = {
+                            Text(
+                                "قابل پرداخت: ${AppRepository.formatPrice(afterCredit)}",
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    )
+                    FilterChip(
+                        selected = paidNow == "0",
+                        onClick = { paidNow = "0" },
+                        label = { Text("نسیه (۰)") }
+                    )
+                    if (total != afterCredit) {
+                        FilterChip(
+                            selected = paidNow == total.toString(),
+                            onClick = { paidNow = total.toString() },
+                            label = { Text("کل: ${AppRepository.formatPrice(total)}") }
+                        )
+                    }
                 }
                 Spacer(modifier = Modifier.height(8.dp))
                 OutlinedTextField(
