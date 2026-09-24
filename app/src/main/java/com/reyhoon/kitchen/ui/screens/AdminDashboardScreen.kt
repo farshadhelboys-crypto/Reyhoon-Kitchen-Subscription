@@ -6,28 +6,28 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
-import androidx.compose.material.icons.filled.AddShoppingCart
-import androidx.compose.material.icons.filled.ChevronLeft
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.DeleteForever
-import androidx.compose.material.icons.filled.ListAlt
+import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.People
-import androidx.compose.material.icons.filled.RestaurantMenu
-import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.Restaurant
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.reyhoon.kitchen.data.ApiClient
 import com.reyhoon.kitchen.data.ApiConfig
 import com.reyhoon.kitchen.data.AppRepository
+import com.reyhoon.kitchen.data.SalesPeriod
 import com.reyhoon.kitchen.ui.components.ReyhoonLogo
 import com.reyhoon.kitchen.ui.theme.GreenMid
+import com.reyhoon.kitchen.ui.theme.GreenPrimary
 import com.reyhoon.kitchen.ui.theme.OrangeSecondary
 import com.reyhoon.kitchen.util.NotificationHelper
 import kotlinx.coroutines.delay
@@ -36,17 +36,17 @@ import kotlinx.coroutines.launch
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AdminDashboardScreen(
-    onNavigateToMenuManage: () -> Unit,
+    onNavigateToOrders: () -> Unit,
+    onNavigateToMenu: () -> Unit,
     onNavigateToCustomers: () -> Unit,
     onNavigateToNewOrder: () -> Unit,
-    onNavigateToOrders: () -> Unit,
-    onNavigateToRatings: () -> Unit,
+    onNavigateToSettings: () -> Unit,
     onLogout: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    var selectedPeriod by remember { mutableStateOf("روزانه") }
+    var selectedPeriod by remember { mutableStateOf(SalesPeriod.TODAY) }
     var lastSeenAt by remember { mutableStateOf(System.currentTimeMillis() - 30_000) }
     var pendingCount by remember { mutableIntStateOf(0) }
     var pendingName by remember { mutableStateOf("") }
@@ -73,8 +73,10 @@ fun AdminDashboardScreen(
                     pendingCount = fresh.size
                     pendingName = fresh.first().customerName
                     lastSeenAt = maxOf(lastSeenAt, fresh.maxOf { it.createdAt })
-                } else if (NotificationHelper.pendingAlarm) {
-                    NotificationHelper.onNewOrdersDetected(context, emptyList(), pendingName)
+                }
+                // اگر آلارم قبلاً acknowledge شده، شمارنده UI را هم پاک کن
+                if (!NotificationHelper.pendingAlarm) {
+                    pendingCount = 0
                 }
             }
             delay(8_000)
@@ -98,7 +100,10 @@ fun AdminDashboardScreen(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         ReyhoonLogo(size = 34.dp)
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("پنل ادمین ریحون", fontWeight = FontWeight.Bold)
+                        Column {
+                            Text("داشبورد ریحون", fontWeight = FontWeight.Bold)
+                            Text("آشپزخانه", style = MaterialTheme.typography.bodySmall)
+                        }
                     }
                 },
                 actions = {
@@ -150,81 +155,101 @@ fun AdminDashboardScreen(
                     shape = RoundedCornerShape(14.dp)
                 ) {
                     Row(modifier = Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Filled.ListAlt, null, tint = GreenMid)
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Text("مشاهده سفارش‌های آنلاین", fontWeight = FontWeight.SemiBold)
+                        Icon(Icons.Filled.NotificationsActive, null, tint = GreenPrimary)
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Text("سفارش‌های آنلاین", fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                        Text("باز کردن", color = GreenPrimary, fontWeight = FontWeight.Bold)
                     }
                 }
             }
 
-            Text("گزارش فروش", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            Text("گزارش فروش", fontWeight = FontWeight.Bold, fontSize = 18.sp)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                listOf("روزانه", "هفتگی", "ماهانه").forEach { period ->
+                listOf(
+                    SalesPeriod.TODAY to "امروز",
+                    SalesPeriod.WEEK to "هفته",
+                    SalesPeriod.MONTH to "ماه"
+                ).forEach { (p, label) ->
                     FilterChip(
-                        selected = selectedPeriod == period,
-                        onClick = { selectedPeriod = period },
-                        label = { Text(period) }
+                        selected = selectedPeriod == p,
+                        onClick = { selectedPeriod = p },
+                        label = { Text(label) }
                     )
                 }
             }
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                StatCard("فروش کل", AppRepository.formatPrice(summary.totalSales), "${summary.orderCount} سفارش", Modifier.weight(1f), GreenMid)
-                StatCard("دریافتی", AppRepository.formatPrice(summary.totalPaid), "تومان", Modifier.weight(1f), OrangeSecondary)
+            Card(shape = RoundedCornerShape(14.dp)) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("تعداد سفارش: ${summary.orderCount}", fontWeight = FontWeight.Medium)
+                    Text("جمع فروش: ${AppRepository.formatPrice(summary.totalSales)} تومان")
+                    Text(
+                        "دریافتی نقد: ${AppRepository.formatPrice(summary.totalPaid)} تومان",
+                        color = GreenPrimary,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        "مانده بدهی سفارش‌ها: ${AppRepository.formatPrice(summary.totalRemaining)} تومان",
+                        color = OrangeSecondary
+                    )
+                }
             }
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                StatCard("بدهی دوره", AppRepository.formatPrice(summary.totalDebt), "تومان", Modifier.weight(1f), MaterialTheme.colorScheme.error)
-                StatCard("کل بدهی", AppRepository.formatPrice(totalDebt), "تومان", Modifier.weight(1f), MaterialTheme.colorScheme.error)
-            }
-            StatCard("کل اعتبار مشتریان", AppRepository.formatPrice(totalCredit), "بدهی آشپزخانه به مشتری", Modifier.fillMaxWidth(), GreenMid)
 
-            Spacer(modifier = Modifier.height(8.dp))
-            Text("عملیات سریع", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-            AdminActionButton(Icons.Filled.NotificationsActive, "سفارش‌های آنلاین", "آلارم فقط با باز کردن این صفحه قطع می‌شود", onNavigateToOrders)
-            AdminActionButton(Icons.Filled.RestaurantMenu, "مدیریت منو + دسته‌بندی", "چلو / خورشت / نوشیدنی / مخلفات ...", onNavigateToMenuManage)
-            AdminActionButton(Icons.Filled.Star, "امتیازات پیک", "امتیاز مشتریان", onNavigateToRatings)
-            AdminActionButton(Icons.Filled.AddShoppingCart, "ثبت سفارش (انتخاب مشتری)", "تلفنی / حضوری", onNavigateToNewOrder)
-            AdminActionButton(Icons.Filled.People, "مشتریان و بدهی", "افزودن و تسویه", onNavigateToCustomers)
-
-            Spacer(modifier = Modifier.height(16.dp))
-            Text("تنظیمات خطرناک", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.error)
-            Card(
-                onClick = { showResetConfirm = true },
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.4f)),
-                shape = RoundedCornerShape(14.dp),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Filled.DeleteForever, null, tint = MaterialTheme.colorScheme.error)
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Column {
-                        Text("پاک کردن تمام داده‌های سرور", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.error)
-                        Text("منو، مشتریان، سفارش‌ها، پرداخت‌ها، امتیازات — ریست کامل")
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                Card(shape = RoundedCornerShape(12.dp), modifier = Modifier.weight(1f)) {
+                    Column(Modifier.padding(12.dp)) {
+                        Text("بدهی مشتریان", fontWeight = FontWeight.SemiBold)
+                        Text(AppRepository.formatPrice(totalDebt), color = OrangeSecondary, fontWeight = FontWeight.Bold)
+                    }
+                }
+                Card(shape = RoundedCornerShape(12.dp), modifier = Modifier.weight(1f)) {
+                    Column(Modifier.padding(12.dp)) {
+                        Text("اعتبار مشتریان", fontWeight = FontWeight.SemiBold)
+                        Text(AppRepository.formatPrice(totalCredit), color = GreenPrimary, fontWeight = FontWeight.Bold)
                     }
                 }
             }
-            resetMsg?.let { Text(it, fontWeight = FontWeight.Bold, color = GreenMid) }
+
+            Text("میانبرها", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+            AdminActionButton(Icons.Filled.NotificationsActive, "سفارش‌های آنلاین", "آلارم با باز کردن این صفحه قطع می‌شود", onNavigateToOrders)
+            AdminActionButton(Icons.Filled.Restaurant, "سفارش حضوری / تلفنی", "ثبت سفارش دستی", onNavigateToNewOrder)
+            AdminActionButton(Icons.Filled.MenuBook, "مدیریت منو", "قیمت و دسته‌بندی", onNavigateToMenu)
+            AdminActionButton(Icons.Filled.People, "مشتریان", "بدهی، اعتبار، کد اشتراک", onNavigateToCustomers)
+            AdminActionButton(Icons.Filled.Settings, "تنظیمات API", "آدرس سرور Cloudflare", onNavigateToSettings)
+
+            HorizontalDivider()
+            TextButton(
+                onClick = { showResetConfirm = true },
+                colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+            ) {
+                Icon(Icons.Filled.DeleteForever, null)
+                Spacer(Modifier.width(6.dp))
+                Text("بازنشانی داده‌ها (خطرناک)")
+            }
+            resetMsg?.let { Text(it, color = GreenPrimary, fontWeight = FontWeight.SemiBold) }
         }
     }
 
     if (showResetConfirm) {
         AlertDialog(
             onDismissRequest = { showResetConfirm = false },
-            title = { Text("⚠️ ریست کامل سرور") },
-            text = { Text("همه داده‌ها از سرور و این دستگاه پاک می‌شوند.\nاین عمل برگشت‌پذیر نیست!") },
+            title = { Text("بازنشانی کامل؟", fontWeight = FontWeight.Bold) },
+            text = { Text("همه سفارش‌ها و پرداخت‌ها پاک می‌شود. این عمل برگشت‌پذیر نیست.") },
             confirmButton = {
                 Button(
                     onClick = {
                         scope.launch {
                             showResetConfirm = false
-                            var ok = true
-                            if (ApiConfig.isConfigured) ok = ApiClient.resetAllData()
-                            AppRepository.clearAllLocal()
+                            if (ApiConfig.isConfigured) {
+                                val ok = ApiClient.resetData()
+                                resetMsg = if (ok) "سرور پاک شد" else "خطا در پاک کردن سرور"
+                            }
+                            AppRepository.orders.clear()
+                            AppRepository.payments.clear()
                             salesTick++
-                            resetMsg = if (ok) "✓ همه داده‌ها پاک شدند" else "خطا در سرور — داده محلی پاک شد"
+                            resetMsg = (resetMsg ?: "") + " | حافظه محلی پاک شد"
                         }
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
-                ) { Text("پاک کردن همه چیز") }
+                ) { Text("بله، پاک کن") }
             },
             dismissButton = { TextButton(onClick = { showResetConfirm = false }) { Text("انصراف") } }
         )
@@ -232,37 +257,24 @@ fun AdminDashboardScreen(
 }
 
 @Composable
-private fun StatCard(
-    title: String, value: String, subtitle: String,
-    modifier: Modifier = Modifier, color: Color
+private fun AdminActionButton(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    title: String,
+    subtitle: String,
+    onClick: () -> Unit
 ) {
     Card(
-        modifier = modifier,
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = color.copy(alpha = 0.12f))
+        onClick = onClick,
+        shape = RoundedCornerShape(12.dp),
+        modifier = Modifier.fillMaxWidth()
     ) {
-        Column(modifier = Modifier.padding(14.dp)) {
-            Text(title, style = MaterialTheme.typography.labelMedium, color = color)
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(value, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            Text(subtitle, style = MaterialTheme.typography.bodySmall)
-        }
-    }
-}
-
-@Composable
-private fun AdminActionButton(
-    icon: ImageVector, title: String, subtitle: String, onClick: () -> Unit
-) {
-    Card(onClick = onClick, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp)) {
-        Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(icon, null, tint = GreenMid, modifier = Modifier.size(28.dp))
-            Spacer(modifier = Modifier.width(14.dp))
-            Column(modifier = Modifier.weight(1f)) {
+        Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(icon, null, tint = GreenPrimary)
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
                 Text(title, fontWeight = FontWeight.SemiBold)
                 Text(subtitle, style = MaterialTheme.typography.bodySmall)
             }
-            Icon(Icons.Filled.ChevronLeft, null)
         }
     }
 }
