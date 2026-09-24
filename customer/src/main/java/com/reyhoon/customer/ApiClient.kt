@@ -29,8 +29,10 @@ data class Order(
         "preparing" -> "در حال آماده‌سازی"
         "shipped" -> "ارسال شده"
         "delivered" -> "تحویل داده شد"
+        "cancelled" -> "لغو شده"
         else -> status
     }
+    val canCancel: Boolean get() = status == "registered" || status == "preparing"
 }
 
 object ApiClient {
@@ -189,6 +191,17 @@ object ApiClient {
         try {
             val c = conn("/api/orders/$orderId/status", "PATCH")
             write(c, JSONObject().put("status", "delivered").put("byCustomer", true))
+            val code = c.responseCode
+            c.disconnect()
+            code in 200..299
+        } catch (_: Exception) { false }
+    }
+
+    suspend fun cancelOrder(orderId: String): Boolean = withContext(Dispatchers.IO) {
+        if (!ApiConfig.isConfigured) return@withContext false
+        try {
+            val c = conn("/api/orders/$orderId/status", "PATCH")
+            write(c, JSONObject().put("status", "cancelled").put("byCustomer", true))
             val code = c.responseCode
             c.disconnect()
             code in 200..299
