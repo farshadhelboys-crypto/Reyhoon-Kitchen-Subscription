@@ -19,7 +19,7 @@ data class Customer(
     val subscriptionCode: String?, val debt: Long, val credit: Long,
     val address: Address
 )
-data class OrderItem(val foodId: String, val foodName: String, val unitPrice: Long, val quantity: Int)
+data class OrderItem(val foodId: String, val foodName: String, val unitPrice: Long, val quantity: Int, val priceTier: String = "regular")
 data class Order(
     val id: String, val items: List<OrderItem>, val totalAmount: Long, val paidAmount: Long,
     val status: String, val createdAt: Long, val deliveredAt: Long?, val rated: Boolean = false
@@ -138,6 +138,7 @@ object ApiClient {
                             .put("foodName", it.foodName)
                             .put("unitPrice", it.unitPrice)
                             .put("quantity", it.quantity)
+                            .put("priceTier", it.priceTier)
                     )
                 }
                 val c = conn("/api/orders", "POST")
@@ -169,7 +170,8 @@ object ApiClient {
                     val it = itemsArr.getJSONObject(j)
                     OrderItem(
                         it.optString("foodId"), it.optString("foodName"),
-                        it.optLong("unitPrice"), it.optInt("quantity", 1)
+                        it.optLong("unitPrice"), it.optInt("quantity", 1),
+                        it.optString("priceTier", "regular").ifBlank { "regular" }
                     )
                 }
                 Order(
