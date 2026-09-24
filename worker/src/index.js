@@ -1,5 +1,5 @@
 /**
- * Reyhoon API — STORE KV binding + in-memory fallback + root/admin page
+ * Reyhoon API — STORE KV + cancel order + priceTier
  */
 var CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -27,7 +27,7 @@ async function load(env, key) {
     try {
       var v = await env.STORE.get(key, "json");
       if (v != null) return v;
-    } catch (e) { /* fall through */ }
+    } catch (e) {}
     return [];
   }
   return mem[key] || [];
@@ -243,6 +243,21 @@ async function handleRequest(request, env) {
       i = orders.findIndex(function (x) { return x.id === id; });
       if (i < 0) return json({ error: "not found" }, 404);
       var status = body.status;
+      var cur = orders[i].status || "registered";
+      if (status === "cancelled") {
+        if (body.byCustomer && cur !== "registered" && cur !== "preparing") {
+          return json({ error: "cannot cancel after ship" }, 400);
+        }
+        if (cur === "delivered" || cur === "cancelled") {
+          return json({ error: "already final" }, 400);
+        }
+        orders[i].status = "cancelled";
+        orders[i].cancelledAt = Date.now();
+        if (body.byCustomer) orders[i].cancelledByCustomer = true;
+        if (body.byKitchen) orders[i].cancelledByKitchen = true;
+        await save(env, "orders", orders);
+        return json(orders[i]);
+      }
       orders[i].status = status;
       if (status === "preparing") orders[i].preparingAt = Date.now();
       if (status === "shipped") orders[i].shippedAt = Date.now();
@@ -326,7 +341,7 @@ async function handleRequest(request, env) {
       if (!body.confirm) return json({ error: "confirm required" }, 400);
       await save(env, "orders", []);
       await save(env, "payments", []);
-      return json({ ok: true, message: "orders and payments cleared" });
+      return json({ ok: true });
     }
 
     return json({ error: "not found", path: path }, 404);
@@ -336,7 +351,7 @@ async function handleRequest(request, env) {
 }
 
 function menuAdminHtml() {
-  return "<!DOCTYPE html><html lang=fa dir=rtl><head><meta charset=utf-8><meta name=viewport content=\"width=device-width,initial-scale=1\"><title>ریحون API</title></head><body style=\"font-family:Tahoma,sans-serif;background:#F1F8E9;padding:24px;text-align:center\"><h1 style=\"color:#2E7D32\">آشپزخانه ریحون</h1><p>API فعال است.</p><p><a href=\"/api/health\">/api/health</a> · <a href=\"/api/menu\">/api/menu</a></p><p style=\"color:#666;font-size:13px\">کلید ادمین پیش‌فرض: reyhoon-admin-2024</p></body></html>";
+  return "<!DOCTYPE html><html lang=fa dir=rtl><head><meta charset=utf-8><meta name=viewport content=\"width=device-width,initial-scale=1\"><title>ریحون API</title></head><body style=\"font-family:Tahoma,sans-serif;background:#F1F8E9;padding:24px;text-align:center\"><h1 style=\"color:#2E7D32\">آشپزخانه ریحون</h1><p>API فعال است.</p><p><a href=\"/api/health\">/api/health</a> · <a href=\"/api/menu\">/api/menu</a></p></body></html>";
 }
 
 export default {
