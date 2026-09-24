@@ -209,7 +209,11 @@ fun HomeScreen(
                             }
                             o.items.forEach { Text("• ${it.foodName} × ${it.quantity}") }
                             Text(
-                                "جمع: ${AppRepository.formatPrice(o.totalAmount)} | دریافتی: ${AppRepository.formatPrice(o.paidAmount)}",
+                                buildString {
+                                    append("جمع: ${AppRepository.formatPrice(o.totalAmount)}")
+                                    append(" | نقد: ${AppRepository.formatPrice(o.cashReceived)}")
+                                    if (o.creditApplied > 0) append(" | اعتبار: ${AppRepository.formatPrice(o.creditApplied)}")
+                                },
                                 color = OrangeSecondary, fontWeight = FontWeight.SemiBold
                             )
                             if (o.remaining > 0) {
@@ -274,7 +278,10 @@ fun HomeScreen(
             text = {
                 Column {
                     Text("جمع: ${AppRepository.formatPrice(o.totalAmount)}")
-                    Text("دریافتی قبلی: ${AppRepository.formatPrice(o.paidAmount)}")
+                    Text(buildString {
+                        append("نقد قبلی: ${AppRepository.formatPrice(o.cashReceived)}")
+                        if (o.creditApplied > 0) append(" | اعتبار: ${AppRepository.formatPrice(o.creditApplied)}")
+                    })
                     Spacer(modifier = Modifier.height(8.dp))
                     Text("برای پر کردن فیلد، روی مبلغ بزنید:", style = MaterialTheme.typography.bodySmall)
                     Spacer(modifier = Modifier.height(6.dp))
