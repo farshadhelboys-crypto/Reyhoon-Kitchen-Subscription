@@ -119,14 +119,16 @@ fun KitchenOrdersScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                                 scope.launch {
                                     if (ApiConfig.isConfigured) {
                                         val updated = ApiClient.updateOrderStatus(order.id, status, byKitchen = true)
-                                        // با هر تغییر وضعیت، آلارم را قطع کن
                                         NotificationHelper.acknowledgeOrdersViewed(context)
                                         if (updated != null) {
                                             val idx = AppRepository.orders.indexOfFirst { it.id == order.id }
                                             if (idx >= 0) AppRepository.orders[idx] = updated
                                         }
                                     } else {
-                                        AppRepository.updateOrderStatus(order.id, status)
+                                        val idx = AppRepository.orders.indexOfFirst { it.id == order.id }
+                                        if (idx >= 0) {
+                                            AppRepository.orders[idx] = AppRepository.orders[idx].copy(status = status)
+                                        }
                                         NotificationHelper.acknowledgeOrdersViewed(context)
                                     }
                                     refresh()
@@ -172,7 +174,7 @@ fun KitchenOrdersScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                         if (paid <= 0) return@Button
                         scope.launch {
                             if (ApiConfig.isConfigured) {
-                                ApiClient.recordPayment(order.customerId, paid, order.id)
+                                ApiClient.recordPayment(order.customerId, paid, "دریافت سفارش")
                             }
                             AppRepository.recordPayment(order.customerId, paid, order.id)
                             payOrder = null
