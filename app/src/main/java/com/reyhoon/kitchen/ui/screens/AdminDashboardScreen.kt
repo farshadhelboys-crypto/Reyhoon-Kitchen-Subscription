@@ -6,16 +6,17 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
+import androidx.compose.material.icons.filled.AddShoppingCart
 import androidx.compose.material.icons.filled.DeleteForever
-import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.People
-import androidx.compose.material.icons.filled.Restaurant
-import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.RestaurantMenu
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -34,11 +35,11 @@ import kotlinx.coroutines.launch
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AdminDashboardScreen(
-    onNavigateToOrders: () -> Unit,
-    onNavigateToMenu: () -> Unit,
+    onNavigateToMenuManage: () -> Unit,
     onNavigateToCustomers: () -> Unit,
     onNavigateToNewOrder: () -> Unit,
-    onNavigateToSettings: () -> Unit,
+    onNavigateToOrders: () -> Unit,
+    onNavigateToRatings: () -> Unit,
     onLogout: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -72,7 +73,6 @@ fun AdminDashboardScreen(
                     pendingName = fresh.first().customerName
                     lastSeenAt = maxOf(lastSeenAt, fresh.maxOf { it.createdAt })
                 }
-                // اگر آلارم acknowledge شده، بنر را هم بردار
                 if (!NotificationHelper.pendingAlarm) {
                     pendingCount = 0
                 }
@@ -203,11 +203,11 @@ fun AdminDashboardScreen(
             }
 
             Text("میانبرها", fontWeight = FontWeight.Bold, fontSize = 18.sp)
-            AdminActionButton(Icons.Filled.NotificationsActive, "سفارش‌های آنلاین", "آلارم با باز کردن این صفحه قطع می‌شود", onNavigateToOrders)
-            AdminActionButton(Icons.Filled.Restaurant, "سفارش حضوری / تلفنی", "ثبت سفارش دستی", onNavigateToNewOrder)
-            AdminActionButton(Icons.Filled.MenuBook, "مدیریت منو", "قیمت و دسته‌بندی", onNavigateToMenu)
-            AdminActionButton(Icons.Filled.People, "مشتریان", "بدهی، اعتبار، کد اشتراک", onNavigateToCustomers)
-            AdminActionButton(Icons.Filled.Settings, "تنظیمات API", "آدرس سرور Cloudflare", onNavigateToSettings)
+            AdminActionButton(Icons.Filled.NotificationsActive, "سفارش‌های آنلاین", "آلارم فقط با باز کردن این صفحه قطع می‌شود", onNavigateToOrders)
+            AdminActionButton(Icons.Filled.RestaurantMenu, "مدیریت منو + دسته‌بندی", "چلو / خورشت / نوشیدنی / مخلفات ...", onNavigateToMenuManage)
+            AdminActionButton(Icons.Filled.Star, "امتیازات پیک", "امتیاز مشتریان", onNavigateToRatings)
+            AdminActionButton(Icons.Filled.AddShoppingCart, "ثبت سفارش (انتخاب مشتری)", "تلفنی / حضوری", onNavigateToNewOrder)
+            AdminActionButton(Icons.Filled.People, "مشتریان و بدهی", "افزودن و تسویه", onNavigateToCustomers)
 
             HorizontalDivider()
             TextButton(
@@ -252,7 +252,7 @@ fun AdminDashboardScreen(
 
 @Composable
 private fun AdminActionButton(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    icon: ImageVector,
     title: String,
     subtitle: String,
     onClick: () -> Unit
