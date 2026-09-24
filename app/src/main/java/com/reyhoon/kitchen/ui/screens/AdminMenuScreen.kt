@@ -25,6 +25,7 @@ import com.reyhoon.kitchen.data.MenuCategories
 import com.reyhoon.kitchen.data.PriceTiers
 import com.reyhoon.kitchen.ui.theme.GreenPrimary
 import com.reyhoon.kitchen.ui.theme.OrangeSecondary
+import com.reyhoon.kitchen.util.AppLog
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -39,15 +40,32 @@ fun AdminMenuScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
 
     suspend fun refresh() {
         loading = true
-        if (ApiConfig.isConfigured) {
-            val remote = ApiClient.fetchMenu()
-            items = remote
-            AppRepository.menuItems.clear()
-            AppRepository.menuItems.addAll(remote)
-            message = "همگام با سرور — ${remote.size} غذا"
-        } else {
+        try {
+            if (ApiConfig.isConfigured) {
+                AppLog.i("AdminMenu", "refresh: fetchMenu…")
+                val remote = ApiClient.fetchMenu()
+                AppLog.i("AdminMenu", "refresh: remote=${remote.size} local=${AppRepository.menuItems.size}")
+                if (remote.isNotEmpty()) {
+                    AppRepository.menuItems.clear()
+                    AppRepository.menuItems.addAll(remote)
+                    items = remote
+                    message = "همگام با سرور — ${remote.size} غذا"
+                } else if (AppRepository.menuItems.isNotEmpty()) {
+                    items = AppRepository.menuItems.toList()
+                    message = "سرور خالی است — نمایش ${items.size} غذای محلی"
+                    AppLog.w("AdminMenu", "remote empty, keeping local ${items.size}")
+                } else {
+                    items = emptyList()
+                    message = "منو خالی است"
+                }
+            } else {
+                items = AppRepository.menuItems.toList()
+                message = "آفلاین — ${items.size} غذا"
+            }
+        } catch (e: Exception) {
+            AppLog.e("AdminMenu", "refresh failed", e)
             items = AppRepository.menuItems.toList()
-            message = "آفلاین"
+            message = "خطا در همگام‌سازی — ${items.size} غذای محلی"
         }
         loading = false
     }
@@ -90,7 +108,12 @@ fun AdminMenuScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
     ) { padding ->
         Column(modifier = Modifier.fillMaxSize().padding(padding)) {
             message?.let {
-                Text(it, modifier = Modifier.padding(16.dp), fontWeight = FontWeight.SemiBold, color = GreenPrimary)
+                Text(
+                    it,
+                    modifier = Modifier.padding(16.dp),
+                    fontWeight = FontWeight.SemiBold,
+                    color = if (it.startsWith("✓") || it.contains("همگام")) GreenPrimary else OrangeSecondary
+                )
             }
             if (loading && items.isEmpty()) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
@@ -151,7 +174,7 @@ fun AdminMenuScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                                             IconButton(onClick = {
                                                 scope.launch {
                                                     if (ApiConfig.isConfigured) ApiClient.deleteMenuItem(item.id)
-                                                    else AppRepository.deleteFood(item.id)
+                                                    AppRepository.deleteFood(item.id)
                                                     refresh()
                                                 }
                                             }) {
@@ -174,17 +197,46 @@ fun AdminMenuScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
             onDismiss = { showDialog = false },
             onSave = { food ->
                 scope.launch {
-                    val result = if (ApiConfig.isConfigured) {
-                        if (editing != null) ApiClient.updateMenuItem(food) else ApiClient.createMenuItem(food)
+                    AppLog.i("AdminMenu", "save start name=${food.name} price=${food.price} edit=${editing != null}")
+                    // 1) همیشه اول محلی ذخیره کن
+                    if (editing != null) {
+                        AppRepository.updateFood(food)
+                    } else if (AppRepository.menuItems.none { it.id == food.id }) {
+                        AppRepository.addFood(food)
                     } else {
-                        if (editing != null) AppRepository.updateFood(food) else AppRepository.addFood(food)
-                        food
+                        AppRepository.updateFood(food)
                     }
-                    if (result != null) {
-                        message = "ذخیره شد — ${MenuCategories.label(food.category)} / ${food.priceTierLabel}"
+                    items = AppRepository.menuItems.toList()
+
+                    // 2) تلاش برای سرور
+                    if (ApiConfig.isConfigured) {
+                        val detail = if (editing != null) {
+                            ApiClient.updateMenuItemDetailed(food)
+                        } else {
+                            ApiClient.createMenuItemDetailed(food)
+                        }
+                        if (detail.item != null) {
+                            val saved = detail.item
+                            if (editing == null && saved.id != food.id) {
+                                AppRepository.deleteFood(food.id)
+                                AppRepository.addFood(saved)
+                            } else {
+                                AppRepository.updateFood(saved)
+                            }
+                            items = AppRepository.menuItems.toList()
+                            message = "✓ ذخیره روی سرور — ${saved.name} (${saved.priceTierLabel})"
+                            AppLog.i("AdminMenu", "save server OK id=${saved.id}")
+                            showDialog = false
+                        } else {
+                            message = "ذخیره محلی شد؛ سرور: ${detail.error ?: "خطا"}"
+                            AppLog.e("AdminMenu", "save server fail: ${detail.error}")
+                            showDialog = false
+                        }
+                    } else {
+                        message = "✓ ذخیره محلی (آفلاین) — ${food.name}"
+                        AppLog.i("AdminMenu", "save offline OK")
                         showDialog = false
-                        refresh()
-                    } else message = "خطا در ذخیره"
+                    }
                 }
             }
         )
@@ -267,6 +319,9 @@ private fun FoodEditDialog(
                     }
                 }
                 OutlinedTextField(value = desc, onValueChange = { desc = it }, label = { Text("توضیحات") }, maxLines = 2)
+                if (name.isBlank() || (price.toLongOrNull() ?: 0) <= 0) {
+                    Text("نام و قیمت معتبر لازم است", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                }
             }
         },
         confirmButton = {
