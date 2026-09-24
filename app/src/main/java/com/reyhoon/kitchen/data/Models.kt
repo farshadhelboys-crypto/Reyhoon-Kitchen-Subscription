@@ -33,7 +33,9 @@ data class FoodItem(
     val description: String = "",
     val price: Long,
     val category: String = "عمومی",
-    val isAvailable: Boolean = true
+    val isAvailable: Boolean = true,
+    /** قیمت هر سیخ اضافه؛ ۰ یعنی این گزینه برای این غذا فعال نیست */
+    val extraSkewerPrice: Long = 0L
 )
 
 data class OrderItem(
