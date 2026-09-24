@@ -36,7 +36,6 @@ object AppRepository {
     /** سفارش مجازی برای بدهی قبلی مشتری (قابل تسویه مثل بقیه) */
     fun ensurePriorDebtOrder(customer: Customer) {
         if (customer.debt <= 0) return
-        // اگر از قبل سفارش بدهی قبلی هست، دوباره نساز (جلوگیری از دوبل با سرور)
         if (orders.any { it.customerId == customer.id && it.source == "prior_debt" }) return
         val amount = customer.debt
         val order = Order(
@@ -108,6 +107,8 @@ object AppRepository {
         val overpay = (cash - afterCredit).coerceAtLeast(0)
         if (overpay > 0) credit += overpay
 
+        // paidAmount = اعتبار + نقد (برای محاسبه باقیمانده بدهی)
+        // درآمد واقعی فقط از cashUsed است (cashReceived)
         val paidOnOrder = creditApplied + cashUsed
         val order = Order(
             customerId = customer.id,
@@ -123,6 +124,7 @@ object AppRepository {
         )
         orders.add(0, order)
 
+        // فقط پول نقد واقعی در لیست پرداخت‌ها
         if (cashUsed > 0 || overpay > 0) {
             payments.add(
                 0,
@@ -227,7 +229,8 @@ object AppRepository {
         }
         val filtered = orders.filter { it.createdAt >= start && it.source != "prior_debt" }
         val totalSales = filtered.sumOf { it.totalAmount }
-        val totalPaid = filtered.sumOf { it.paidAmount }
+        // درآمد واقعی = فقط نقد؛ اعتبار مشتری درآمد نیست
+        val totalPaid = filtered.sumOf { it.cashReceived }
         return SalesSummary(
             period = period,
             totalSales = totalSales,
