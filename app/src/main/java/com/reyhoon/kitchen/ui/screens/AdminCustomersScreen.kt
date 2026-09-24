@@ -143,9 +143,10 @@ fun AdminCustomersScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
         var code by remember { mutableStateOf("") }
         var street by remember { mutableStateOf("") }
         var city by remember { mutableStateOf("") }
+        var priorDebt by remember { mutableStateOf("") }
         AlertDialog(
             onDismissRequest = { showAddDialog = false },
-            title = { Text("افزودن مشتری (آنلاین)") },
+            title = { Text("افزودن مشتری") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("کد خالی = تولید خودکار ۶ رقمی روی سرور", style = MaterialTheme.typography.bodySmall)
@@ -154,6 +155,13 @@ fun AdminCustomersScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                     OutlinedTextField(value = code, onValueChange = { code = it.filter { ch -> ch.isDigit() } }, label = { Text("کد اشتراک (اختیاری)") }, singleLine = true)
                     OutlinedTextField(value = street, onValueChange = { street = it }, label = { Text("آدرس") }, singleLine = true)
                     OutlinedTextField(value = city, onValueChange = { city = it }, label = { Text("شهر") }, singleLine = true)
+                    OutlinedTextField(
+                        value = priorDebt,
+                        onValueChange = { priorDebt = it.filter { ch -> ch.isDigit() } },
+                        label = { Text("بدهی قبلی (تومان) — اختیاری") },
+                        supportingText = { Text("اگر از قبل بدهکار است وارد کنید؛ بعداً با تسویه کسر می‌شود") },
+                        singleLine = true
+                    )
                 }
             },
             confirmButton = {
@@ -162,14 +170,39 @@ fun AdminCustomersScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                         if (name.isNotBlank() && phone.isNotBlank()) {
                             scope.launch {
                                 loading = true
-                                val draft = Customer(name = name.trim(), phone = phone.trim(),
+                                val debtAmt = priorDebt.toLongOrNull() ?: 0L
+                                val draft = Customer(
+                                    name = name.trim(),
+                                    phone = phone.trim(),
                                     subscriptionCode = code.trim().ifBlank { null },
-                                    address = Address(street = street.trim(), city = city.trim()))
+                                    debt = debtAmt,
+                                    address = Address(street = street.trim(), city = city.trim())
+                                )
                                 var saved = draft
                                 if (ApiConfig.isConfigured) {
                                     val remote = ApiClient.createCustomer(draft)
-                                    if (remote != null) { saved = remote; message = "مشتری روی سرور — کد: ${remote.subscriptionCode}" }
-                                    else message = "خطا در سرور — فقط محلی"
+                                    if (remote != null) {
+                                        saved = remote
+                                        message = buildString {
+                                            append("مشتری روی سرور — کد: ${remote.subscriptionCode}")
+                                            if (debtAmt > 0) append(" | بدهی قبلی: ${AppRepository.formatPrice(debtAmt)}")
+                                        }
+                                        val remoteOrders = ApiClient.fetchOrders(remote.id)
+                                        if (remoteOrders.isNotEmpty()) {
+                                            remoteOrders.forEach { o ->
+                                                val i = AppRepository.orders.indexOfFirst { it.id == o.id }
+                                                if (i >= 0) AppRepository.orders[i] = o
+                                                else AppRepository.orders.add(0, o)
+                                            }
+                                        } else if (debtAmt > 0) {
+                                            AppRepository.ensurePriorDebtOrder(saved)
+                                        }
+                                    } else {
+                                        message = "خطا در سرور — فقط محلی"
+                                        if (debtAmt > 0) AppRepository.ensurePriorDebtOrder(saved)
+                                    }
+                                } else if (debtAmt > 0) {
+                                    AppRepository.ensurePriorDebtOrder(saved)
                                 }
                                 AppRepository.addCustomer(saved)
                                 showAddDialog = false
@@ -179,7 +212,7 @@ fun AdminCustomersScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                         }
                     },
                     enabled = name.isNotBlank() && phone.isNotBlank()
-                ) { Text("ذخیره روی سرور") }
+                ) { Text("ذخیره") }
             },
             dismissButton = { TextButton(onClick = { showAddDialog = false }) { Text("انصراف") } }
         )
