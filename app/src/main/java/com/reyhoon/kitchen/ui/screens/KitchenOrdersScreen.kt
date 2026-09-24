@@ -10,8 +10,8 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.reyhoon.kitchen.data.ApiClient
@@ -33,17 +33,16 @@ import java.util.Locale
 @Composable
 fun KitchenOrdersScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
     val context = LocalContext.current
+    LaunchedEffect(Unit) {
+        NotificationHelper.acknowledgeOrdersViewed(context)
+    }
+
     var orders by remember { mutableStateOf<List<Order>>(emptyList()) }
     var loading by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
     var payOrder by remember { mutableStateOf<Order?>(null) }
     val scope = rememberCoroutineScope()
     val df = remember { SimpleDateFormat("HH:mm yyyy/MM/dd", Locale("fa")) }
-
-    // باز شدن این صفحه = قطع قطعی آلارم و نوتیفیکیشن
-    LaunchedEffect(Unit) {
-        NotificationHelper.acknowledgeOrdersViewed(context)
-    }
 
     suspend fun refresh() {
         loading = true
@@ -98,37 +97,33 @@ fun KitchenOrdersScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
             message?.let {
-                Text(it, modifier = Modifier.padding(12.dp), color = GreenPrimary, fontWeight = FontWeight.SemiBold)
+                Text(it, modifier = Modifier.padding(12.dp), fontWeight = FontWeight.SemiBold, color = GreenPrimary)
             }
             if (loading && orders.isEmpty()) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
             } else if (orders.isEmpty()) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("سفارشی نیست")
+                    Text("سفارشی نیست", style = MaterialTheme.typography.titleMedium)
                 }
             } else {
                 LazyColumn(
-                    contentPadding = PaddingValues(12.dp),
+                    contentPadding = PaddingValues(16.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     items(orders, key = { it.id }) { order ->
                         OrderCard(
                             order = order,
-                            formatTs = { ts -> df.format(Date(ts)) },
+                            formatTs = { ts -> if (ts == null) "—" else df.format(Date(ts)) },
                             onStatus = { status ->
                                 scope.launch {
                                     if (ApiConfig.isConfigured) {
                                         val updated = ApiClient.updateOrderStatus(order.id, status, byKitchen = true)
-                                        NotificationHelper.acknowledgeOrdersViewed(context)
+                                            .also { NotificationHelper.acknowledgeOrdersViewed(context) }
                                         if (updated != null) {
                                             val idx = AppRepository.orders.indexOfFirst { it.id == order.id }
                                             if (idx >= 0) AppRepository.orders[idx] = updated
                                         }
                                     } else {
-                                        val idx = AppRepository.orders.indexOfFirst { it.id == order.id }
-                                        if (idx >= 0) {
-                                            AppRepository.orders[idx] = AppRepository.orders[idx].copy(status = status)
-                                        }
                                         NotificationHelper.acknowledgeOrdersViewed(context)
                                     }
                                     refresh()
@@ -143,19 +138,18 @@ fun KitchenOrdersScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
         }
     }
 
-    payOrder?.let { order ->
-        var amount by remember { mutableStateOf("") }
-        val remaining = order.remaining
+    payOrder?.let { o ->
+        var amount by remember(o.id) { mutableStateOf(if (o.remaining > 0) o.remaining.toString() else "") }
         AlertDialog(
             onDismissRequest = { payOrder = null },
             title = { Text("ثبت مبلغ دریافتی") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("باقیمانده: ${AppRepository.formatPrice(remaining)} تومان")
+                    Text("باقیمانده: ${AppRepository.formatPrice(o.remaining)} تومان")
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         FilterChip(
-                            selected = amount == remaining.toString(),
-                            onClick = { amount = remaining.toString() },
+                            selected = amount == o.remaining.toString(),
+                            onClick = { amount = o.remaining.toString() },
                             label = { Text("کل باقیمانده") }
                         )
                     }
@@ -170,13 +164,13 @@ fun KitchenOrdersScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
             confirmButton = {
                 Button(
                     onClick = {
-                        val paid = amount.toLongOrNull() ?: 0L
-                        if (paid <= 0) return@Button
+                        val pay = amount.toLongOrNull() ?: 0L
+                        if (pay <= 0) return@Button
                         scope.launch {
                             if (ApiConfig.isConfigured) {
-                                ApiClient.recordPayment(order.customerId, paid, "دریافت سفارش")
+                                ApiClient.recordPayment(o.customerId, pay, "دریافت سفارش")
                             }
-                            AppRepository.recordPayment(order.customerId, paid, order.id)
+                            AppRepository.recordPayment(o.customerId, pay, o.id)
                             payOrder = null
                             refresh()
                             message = "پرداخت ثبت شد"
@@ -192,7 +186,7 @@ fun KitchenOrdersScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
 @Composable
 private fun OrderCard(
     order: Order,
-    formatTs: (Long) -> String,
+    formatTs: (Long?) -> String,
     onStatus: (String) -> Unit,
     onPay: () -> Unit
 ) {
