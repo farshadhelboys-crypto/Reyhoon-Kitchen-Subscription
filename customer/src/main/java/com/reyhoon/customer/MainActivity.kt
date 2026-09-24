@@ -243,7 +243,6 @@ fun MainTabs(customer: Customer, onLogout: () -> Unit) {
     }
 }
 
-@Composable
 /** ایموجی و برچسب شیک برای دسته‌بندی منو */
 private fun categoryEmoji(cat: String): String {
     val c = cat.trim()
