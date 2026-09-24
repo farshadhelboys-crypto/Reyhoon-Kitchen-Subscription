@@ -66,7 +66,8 @@ enum class OrderStatus(val key: String, val labelFa: String) {
     REGISTERED("registered", "سفارش ثبت شد"),
     PREPARING("preparing", "در حال آماده‌سازی"),
     SHIPPED("shipped", "ارسال شده"),
-    DELIVERED("delivered", "تحویل داده شد");
+    DELIVERED("delivered", "تحویل داده شد"),
+    CANCELLED("cancelled", "لغو شده");
 
     companion object {
         fun fromKey(key: String): OrderStatus =
@@ -94,9 +95,7 @@ data class Order(
     val note: String = "",
     val source: String = ""
 ) {
-    /** باقیمانده بدهی سفارش (پس از اعتبار + دریافتی نقد) */
     val remaining: Long get() = (totalAmount - paidAmount).coerceAtLeast(0)
-    /** فقط پول نقد واقعی — اعتبار مشتری جزو درآمد نیست */
     val cashReceived: Long get() = (paidAmount - creditApplied).coerceAtLeast(0)
     val isFullyPaid: Boolean get() = remaining == 0L
     val statusEnum: OrderStatus get() = OrderStatus.fromKey(status)
