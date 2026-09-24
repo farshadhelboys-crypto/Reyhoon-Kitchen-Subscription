@@ -30,8 +30,10 @@ async function save(env, key, data) {
 }
 
 function isAdmin(request, env) {
-  var key = request.headers.get("X-Admin-Key") || "";
-  return key && env.ADMIN_KEY && key === env.ADMIN_KEY;
+  var key = (request.headers.get("X-Admin-Key") || "").trim();
+  // اگر ADMIN_KEY در Cloudflare ست نشده، کلید پیش‌فرض اپ پذیرفته می‌شود
+  var expected = (env.ADMIN_KEY || "reyhoon-admin-2024").trim();
+  return key.length > 0 && key === expected;
 }
 
 function calcDebtFromOrders(orders, customerId) {
