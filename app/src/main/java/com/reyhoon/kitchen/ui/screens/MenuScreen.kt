@@ -18,7 +18,6 @@ import androidx.compose.ui.unit.sp
 import com.reyhoon.kitchen.data.ApiClient
 import com.reyhoon.kitchen.data.ApiConfig
 import com.reyhoon.kitchen.data.AppRepository
-import com.reyhoon.kitchen.data.FoodItem
 import com.reyhoon.kitchen.data.MenuCategories
 import com.reyhoon.kitchen.data.OrderItem
 import com.reyhoon.kitchen.ui.theme.GreenPrimary
@@ -27,64 +26,50 @@ import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MenuScreen(
-    onBack: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val customer by AppRepository.currentCustomer
-    var menu by remember { mutableStateOf<List<FoodItem>>(emptyList()) }
+fun MenuScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
+    val customer = AppRepository.currentCustomer.value
+    var menu by remember { mutableStateOf(AppRepository.menuItems.filter { it.isAvailable }) }
     var quantities by remember { mutableStateOf<Map<String, Int>>(emptyMap()) }
     var paidNow by remember { mutableStateOf("") }
-    var loading by remember { mutableStateOf(false) }
     var resultMessage by remember { mutableStateOf<String?>(null) }
+    var loading by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
     LaunchedEffect(Unit) {
-        loading = true
-        menu = if (ApiConfig.isConfigured) {
+        if (ApiConfig.isConfigured) {
             val remote = ApiClient.fetchMenu()
             if (remote.isNotEmpty()) {
                 AppRepository.menuItems.clear()
                 AppRepository.menuItems.addAll(remote)
-                remote
-            } else {
-                AppRepository.menuItems.filter { it.isAvailable }
+                menu = remote.filter { it.isAvailable }
             }
         } else {
-            AppRepository.menuItems.filter { it.isAvailable }
+            menu = AppRepository.menuItems.filter { it.isAvailable }
         }
-        loading = false
     }
 
     val cartItems = remember(quantities, menu) {
-        menu.mapNotNull { food ->
+        menu.flatMap { food ->
+            val list = mutableListOf<OrderItem>()
             val q = quantities[food.id] ?: 0
-            if (q > 0) OrderItem(food.id, food.name, food.price, q) else null
+            if (q > 0) list.add(OrderItem(food.id, food.name, food.price, q))
+            val sq = quantities["${food.id}__skewer"] ?: 0
+            if (sq > 0 && food.extraSkewerPrice > 0) {
+                list.add(OrderItem("${food.id}__skewer", "سیخ اضافه (${food.name})", food.extraSkewerPrice, sq))
+            }
+            list
         }
     }
     val total = cartItems.sumOf { it.total }
-    val credit = customer?.credit ?: 0L
-    val afterCredit = (total - credit).coerceAtLeast(0)
-    val grouped = remember(menu) { menu.groupBy { it.category.ifBlank { "عمومی" } } }
+    val customerCredit = customer?.credit ?: 0L
+    val afterCredit = (total - customerCredit).coerceAtLeast(0)
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = {
-                    Column {
-                        Text("ثبت سفارش", fontWeight = FontWeight.Bold)
-                        customer?.let {
-                            Text(
-                                "${it.name} — کد ${it.subscriptionCode ?: "—"}",
-                                style = MaterialTheme.typography.bodySmall
-                            )
-                        }
-                    }
-                },
+                title = { Text("ثبت سفارش حضوری", fontWeight = FontWeight.Bold) },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "بازگشت")
-                    }
+                    IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "بازگشت") }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = GreenPrimary,
@@ -95,73 +80,52 @@ fun MenuScreen(
         },
         modifier = modifier
     ) { padding ->
-        if (customer == null) {
-            Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
-                Text("مشتری انتخاب نشده — با کد اشتراک وارد شوید")
-            }
-            return@Scaffold
-        }
-
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
                 .padding(16.dp)
         ) {
-            if (credit > 0) {
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = GreenPrimary.copy(alpha = 0.12f)),
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
+            if (customer != null) {
+                Text(
+                    "مشتری: ${customer.name} | کد: ${customer.subscriptionCode ?: "—"}",
+                    fontWeight = FontWeight.SemiBold
+                )
+                if (customerCredit > 0) {
                     Text(
-                        "اعتبار مشتری: ${AppRepository.formatPrice(credit)} تومان از مبلغ سفارش کسر می‌شود.",
-                        modifier = Modifier.padding(12.dp),
+                        "اعتبار: ${AppRepository.formatPrice(customerCredit)} تومان",
                         color = GreenPrimary,
-                        fontWeight = FontWeight.SemiBold
+                        fontWeight = FontWeight.Medium
                     )
                 }
-                Spacer(modifier = Modifier.height(10.dp))
+                Spacer(modifier = Modifier.height(8.dp))
             }
 
-            if (loading && menu.isEmpty()) {
-                Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator()
-                }
-            } else if (menu.isEmpty()) {
-                Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
-                    Text("منو خالی است — از پنل ادمین غذا اضافه کنید")
-                }
-            } else {
-                Text("انتخاب غذاها (دسته‌بندی‌شده)", fontWeight = FontWeight.SemiBold)
-                Spacer(modifier = Modifier.height(8.dp))
-                LazyColumn(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    grouped.forEach { (cat, list) ->
-                        item {
-                            Card(
-                                colors = CardDefaults.cardColors(containerColor = GreenPrimary.copy(alpha = 0.12f)),
-                                shape = RoundedCornerShape(12.dp),
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Text(MenuCategories.emoji(cat), fontSize = 26.sp)
-                                    Spacer(modifier = Modifier.width(10.dp))
-                                    Text(cat, fontWeight = FontWeight.Bold, fontSize = 17.sp, color = GreenPrimary)
-                                }
-                            }
+            val grouped = menu.groupBy { it.category.ifBlank { "عمومی" } }
+            LazyColumn(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                grouped.forEach { (cat, list) ->
+                    item {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(vertical = 6.dp)
+                        ) {
+                            Text(MenuCategories.emoji(cat), fontSize = 26.sp)
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Text(
+                                cat.ifBlank { "عمومی" },
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 17.sp,
+                                color = GreenPrimary
+                            )
                         }
-                        items(list, key = { it.id }) { food ->
-                            Card(shape = RoundedCornerShape(10.dp)) {
-                                Row(
-                                    modifier = Modifier.padding(12.dp).fillMaxWidth(),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
+                    }
+                    items(list, key = { it.id }) { food ->
+                        Card(shape = RoundedCornerShape(10.dp)) {
+                            Column(modifier = Modifier.padding(12.dp).fillMaxWidth()) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
                                     Text(MenuCategories.emoji(food.category), fontSize = 22.sp)
                                     Spacer(modifier = Modifier.width(10.dp))
                                     Column(modifier = Modifier.weight(1f)) {
@@ -186,6 +150,35 @@ fun MenuScreen(
                                         quantities = quantities.toMutableMap().apply { put(food.id, qty + 1) }
                                     }) { Icon(Icons.Default.Add, null) }
                                 }
+                                if (food.extraSkewerPrice > 0) {
+                                    Spacer(modifier = Modifier.height(6.dp))
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text("🍢", fontSize = 18.sp)
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text("سیخ اضافه", fontWeight = FontWeight.Medium)
+                                            Text(
+                                                "${AppRepository.formatPrice(food.extraSkewerPrice)} تومان",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = OrangeSecondary
+                                            )
+                                        }
+                                        val skKey = "${food.id}__skewer"
+                                        val sq = quantities[skKey] ?: 0
+                                        IconButton(
+                                            onClick = {
+                                                quantities = quantities.toMutableMap().apply {
+                                                    if (sq <= 1) remove(skKey) else put(skKey, sq - 1)
+                                                }
+                                            },
+                                            enabled = sq > 0
+                                        ) { Icon(Icons.Default.Remove, null) }
+                                        Text("$sq", fontWeight = FontWeight.Bold, modifier = Modifier.width(28.dp))
+                                        IconButton(onClick = {
+                                            quantities = quantities.toMutableMap().apply { put(skKey, sq + 1) }
+                                        }) { Icon(Icons.Default.Add, null) }
+                                    }
+                                }
                             }
                         }
                     }
@@ -200,11 +193,11 @@ fun MenuScreen(
                     fontWeight = FontWeight.Bold,
                     color = OrangeSecondary
                 )
-                if (credit > 0) {
+                if (customerCredit > 0) {
                     Text(
                         "پس از کسر اعتبار: ${AppRepository.formatPrice(afterCredit)} تومان",
-                        color = GreenPrimary,
-                        fontWeight = FontWeight.SemiBold
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = GreenPrimary
                     )
                 }
                 Spacer(modifier = Modifier.height(8.dp))
@@ -240,10 +233,7 @@ fun MenuScreen(
                     onValueChange = { paidNow = it.filter { c -> c.isDigit() } },
                     label = { Text("مبلغ دریافتی از مشتری (تومان)") },
                     singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                    supportingText = {
-                        Text("۰ = نسیه کامل | بیشتر از مبلغ = اعتبار برای بعد")
-                    }
+                    modifier = Modifier.fillMaxWidth()
                 )
                 Spacer(modifier = Modifier.height(12.dp))
                 Button(
@@ -257,25 +247,24 @@ fun MenuScreen(
                                     customerId = c.id,
                                     items = cartItems,
                                     paidNow = paid,
-                                    note = "سفارش حضوری با کد اشتراک",
                                     source = "kitchen"
                                 )
                                 if (remote != null) {
                                     val local = AppRepository.createOrder(c, cartItems, paid)
-                                    resultMessage = local.message
                                     quantities = emptyMap()
                                     paidNow = ""
+                                    resultMessage = local.message + "\n✓ روی سرور ذخیره شد"
                                 } else {
                                     val local = AppRepository.createOrder(c, cartItems, paid)
-                                    resultMessage = local.message + "\n(هشدار: ممکن است روی سرور ذخیره نشده باشد)"
                                     quantities = emptyMap()
                                     paidNow = ""
+                                    resultMessage = local.message + "\n⚠ ممکن است روی سرور ذخیره نشده باشد"
                                 }
                             } else {
                                 val local = AppRepository.createOrder(c, cartItems, paid)
-                                resultMessage = local.message
                                 quantities = emptyMap()
                                 paidNow = ""
+                                resultMessage = local.message
                             }
                             loading = false
                         }
@@ -285,7 +274,7 @@ fun MenuScreen(
                     shape = RoundedCornerShape(12.dp)
                 ) {
                     if (loading) CircularProgressIndicator(modifier = Modifier.size(22.dp), color = MaterialTheme.colorScheme.onPrimary)
-                    else Text("ثبت سفارش برای ${customer!!.name}", fontWeight = FontWeight.Bold)
+                    else Text("ثبت سفارش", fontWeight = FontWeight.Bold)
                 }
             }
         }
@@ -294,13 +283,10 @@ fun MenuScreen(
     resultMessage?.let { msg ->
         AlertDialog(
             onDismissRequest = { resultMessage = null },
-            title = { Text("سفارش ثبت شد") },
+            title = { Text("نتیجه") },
             text = { Text(msg) },
             confirmButton = {
-                Button(onClick = {
-                    resultMessage = null
-                    onBack()
-                }) { Text("باشه") }
+                Button(onClick = { resultMessage = null; onBack() }) { Text("باشه") }
             }
         )
     }
