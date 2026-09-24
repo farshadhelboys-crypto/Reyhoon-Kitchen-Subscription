@@ -8,6 +8,7 @@ object MenuCategories {
 
     val DEFS = listOf(
         Cat("چلوها", "🍚", 0xFF2E7D32),
+        Cat("کباب‌ها", "🍢", 0xFFBF360C),
         Cat("خورشت‌ها", "🍲", 0xFFE65100),
         Cat("نوشیدنی‌ها", "🥤", 0xFF1565C0),
         Cat("مخلفات", "🥗", 0xFF6A1B9A),
@@ -24,6 +25,7 @@ object MenuCategories {
         return DEFS.find { it.name == c }?.emoji
             ?: when {
                 c.contains("چلو") -> "🍚"
+                c.contains("کباب") -> "🍢"
                 c.contains("خورشت") -> "🍲"
                 c.contains("نوشید") -> "🥤"
                 c.contains("مخلف") -> "🥗"
