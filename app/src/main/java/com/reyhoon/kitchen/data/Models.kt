@@ -2,30 +2,28 @@ package com.reyhoon.kitchen.data
 
 import java.util.UUID
 
+data class Address(
+    val street: String = "",
+    val city: String = "",
+    val postalCode: String = "",
+    val notes: String = ""
+) {
+    fun fullAddress(): String =
+        listOf(street, city, postalCode).filter { it.isNotBlank() }.joinToString(" - ")
+}
+
 data class Customer(
     val id: String = UUID.randomUUID().toString(),
     val name: String,
     val phone: String,
-    val address: Address,
+    val address: Address = Address(),
     val subscriptionCode: String? = null,
     val debt: Long = 0L,
     val credit: Long = 0L,
     val notes: String = "",
-    val createdAt: Long = System.currentTimeMillis()
+    val createdAt: Long = System.currentTimeMillis(),
+    val isSelfRegistered: Boolean = false
 )
-
-data class Address(
-    val street: String,
-    val city: String,
-    val postalCode: String = "",
-    val notes: String = ""
-) {
-    fun fullAddress(): String {
-        return listOf(street, city, if (postalCode.isNotBlank()) "کدپستی: $postalCode" else "")
-            .filter { it.isNotBlank() }
-            .joinToString(" - ")
-    }
-}
 
 data class FoodItem(
     val id: String = UUID.randomUUID().toString(),
@@ -35,8 +33,23 @@ data class FoodItem(
     val category: String = "عمومی",
     val isAvailable: Boolean = true,
     /** قیمت هر سیخ اضافه؛ ۰ یعنی این گزینه برای این غذا فعال نیست */
-    val extraSkewerPrice: Long = 0L
-)
+    val extraSkewerPrice: Long = 0L,
+    /** economy = اقتصادی | regular = غیر اقتصادی */
+    val priceTier: String = "regular"
+) {
+    val isEconomy: Boolean get() = priceTier == "economy"
+    val priceTierLabel: String get() = if (isEconomy) "اقتصادی" else "غیر اقتصادی"
+}
+
+object PriceTiers {
+    const val ECONOMY = "economy"
+    const val REGULAR = "regular"
+    val ALL = listOf(ECONOMY, REGULAR)
+    fun label(tier: String): String = when (tier) {
+        ECONOMY -> "اقتصادی"
+        else -> "غیر اقتصادی"
+    }
+}
 
 data class OrderItem(
     val foodId: String,
@@ -90,10 +103,10 @@ data class Order(
 data class Payment(
     val id: String = UUID.randomUUID().toString(),
     val customerId: String,
-    val orderId: String? = null,
     val amount: Long,
-    val createdAt: Long = System.currentTimeMillis(),
-    val note: String = ""
+    val orderId: String? = null,
+    val note: String = "",
+    val createdAt: Long = System.currentTimeMillis()
 )
 
 data class SalesSummary(
@@ -108,6 +121,5 @@ data class OrderResult(
     val order: Order,
     val creditApplied: Long,
     val newCredit: Long,
-    val newDebt: Long,
     val message: String
 )
