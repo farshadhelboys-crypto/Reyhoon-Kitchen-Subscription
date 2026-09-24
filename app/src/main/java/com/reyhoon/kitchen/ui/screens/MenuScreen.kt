@@ -53,10 +53,10 @@ fun MenuScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
         menu.flatMap { food ->
             val list = mutableListOf<OrderItem>()
             val q = quantities[food.id] ?: 0
-            if (q > 0) list.add(OrderItem(food.id, food.name, food.price, q))
+            if (q > 0) list.add(OrderItem(food.id, food.name, food.price, q, food.priceTier))
             val sq = quantities["${food.id}__skewer"] ?: 0
             if (sq > 0 && food.extraSkewerPrice > 0) {
-                list.add(OrderItem("${food.id}__skewer", "سیخ اضافه (${food.name})", food.extraSkewerPrice, sq))
+                list.add(OrderItem("${food.id}__skewer", "سیخ اضافه (${food.name})", food.extraSkewerPrice, sq, food.priceTier))
             }
             list
         }
@@ -256,17 +256,11 @@ fun MenuScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                                     paidNow = paid,
                                     source = "kitchen"
                                 )
-                                if (remote != null) {
-                                    val local = AppRepository.createOrder(c, cartItems, paid)
-                                    quantities = emptyMap()
-                                    paidNow = ""
-                                    resultMessage = local.message + "\n✓ روی سرور ذخیره شد"
-                                } else {
-                                    val local = AppRepository.createOrder(c, cartItems, paid)
-                                    quantities = emptyMap()
-                                    paidNow = ""
-                                    resultMessage = local.message + "\n⚠ ممکن است روی سرور ذخیره نشده باشد"
-                                }
+                                val local = AppRepository.createOrder(c, cartItems, paid)
+                                quantities = emptyMap()
+                                paidNow = ""
+                                resultMessage = if (remote != null) local.message + "\n✓ روی سرور ذخیره شد"
+                                else local.message + "\n⚠ ممکن است روی سرور ذخیره نشده باشد"
                             } else {
                                 val local = AppRepository.createOrder(c, cartItems, paid)
                                 quantities = emptyMap()
