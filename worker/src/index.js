@@ -1,7 +1,5 @@
 /**
- * Reyhoon API — accounting fixed (debt = sum of order remainings only)
- * DELETE customer, admin reset, address/phone on orders
- * Menu items support extraSkewerPrice for kebab category
+ * Reyhoon API — prior debt on customer create + accounting fixed
  */
 var CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -133,15 +131,32 @@ async function handleRequest(request) {
       var rawCode = (body.subscriptionCode || "").trim();
       code = /^\d{4,10}$/.test(rawCode) ? rawCode : genCode();
       while (customers.some(function (x) { return x.subscriptionCode === code; })) code = genCode();
+      var priorDebt = Math.max(0, Number(body.debt) || 0);
       c = {
         id: uid(), name: (body.name || "").trim(), phone: (body.phone || "").trim(),
         address: body.address || { street: "", city: "", postalCode: "", notes: "" },
-        subscriptionCode: code, debt: 0, credit: Number(body.credit) || 0,
+        subscriptionCode: code, debt: priorDebt, credit: Number(body.credit) || 0,
         notes: body.notes || "", createdAt: Date.now(), isSelfRegistered: false
       };
       if (!c.name || !c.phone) return json({ error: "name and phone required" }, 400);
       customers.push(c);
       await save(env, "customers", customers);
+      if (priorDebt > 0) {
+        var ordersList = await load(env, "orders");
+        var addr = c.address || {};
+        var addressStr = [addr.street || "", addr.city || ""].filter(Boolean).join(" - ");
+        ordersList.unshift({
+          id: uid(), customerId: c.id, customerName: c.name,
+          customerPhone: c.phone || "", customerCode: c.subscriptionCode || "",
+          customerAddress: addressStr,
+          items: [{ foodId: "prior_debt", foodName: "\u0628\u062f\u0647\u06cc \u0642\u0628\u0644\u06cc", unitPrice: priorDebt, quantity: 1 }],
+          totalAmount: priorDebt, paidAmount: 0, creditApplied: 0,
+          status: "delivered", source: "prior_debt", createdAt: Date.now(),
+          preparingAt: Date.now(), shippedAt: Date.now(), deliveredAt: Date.now(),
+          note: "\u0628\u062f\u0647\u06cc \u0642\u0628\u0644\u06cc \u0647\u0646\u06af\u0627\u0645 \u062b\u0628\u062a \u0645\u0634\u062a\u0631\u06cc", rated: false
+        });
+        await save(env, "orders", ordersList);
+      }
       return json(c, 201);
     }
 
@@ -215,12 +230,12 @@ async function handleRequest(request) {
       var overpay = Math.max(0, paidNow - afterCredit);
       if (overpay > 0) credit += overpay;
       var paidOnOrder = creditApplied + cashUsed;
-      var addr = customer.address || {};
-      var addressStr = [addr.street || "", addr.city || ""].filter(Boolean).join(" - ");
+      var addr2 = customer.address || {};
+      var addressStr2 = [addr2.street || "", addr2.city || ""].filter(Boolean).join(" - ");
       var order = {
         id: uid(), customerId: customer.id, customerName: customer.name,
         customerPhone: customer.phone || "", customerCode: customer.subscriptionCode || "",
-        customerAddress: addressStr,
+        customerAddress: addressStr2,
         isNewCustomer: !!customer.isSelfRegistered && !customer._orderedBefore,
         items: items, totalAmount: total, paidAmount: paidOnOrder,
         creditApplied: creditApplied, status: "registered",
@@ -239,7 +254,7 @@ async function handleRequest(request) {
         var payments = await load(env, "payments");
         payments.unshift({
           id: uid(), customerId: customer.id, orderId: order.id,
-          amount: cashUsed + overpay, note: body.note || "پرداخت هنگام سفارش", createdAt: Date.now()
+          amount: cashUsed + overpay, note: body.note || "\u067e\u0631\u062f\u0627\u062e\u062a \u0647\u0646\u06af\u0627\u0645 \u0633\u0641\u0627\u0631\u0634", createdAt: Date.now()
         });
         await save(env, "payments", payments);
       }
@@ -337,14 +352,14 @@ async function handleRequest(request) {
         remainingPay -= pay;
       }
       await save(env, "orders", orders);
-      var debt = calcDebtFromOrders(orders, body.customerId);
-      var credit = (Number(customers[ci].credit) || 0) + remainingPay;
-      customers[ci] = Object.assign({}, customers[ci], { debt: debt, credit: credit });
+      var debt2 = calcDebtFromOrders(orders, body.customerId);
+      var credit2 = (Number(customers[ci].credit) || 0) + remainingPay;
+      customers[ci] = Object.assign({}, customers[ci], { debt: debt2, credit: credit2 });
       await save(env, "customers", customers);
       var paymentsList = await load(env, "payments");
       var p = {
         id: uid(), customerId: body.customerId, amount: amount,
-        note: body.note || "تسویه بدهی", createdAt: Date.now()
+        note: body.note || "\u062a\u0633\u0648\u06cc\u0647 \u0628\u062f\u0647\u06cc", createdAt: Date.now()
       };
       paymentsList.unshift(p);
       await save(env, "payments", paymentsList);
@@ -368,5 +383,5 @@ async function handleRequest(request) {
 }
 
 function menuAdminHtml() {
-  return "<!DOCTYPE html><html lang=fa dir=rtl><head><meta charset=utf-8><meta name=viewport content=\"width=device-width,initial-scale=1\"><title>Menu Admin</title></head><body style=\"font-family:Tahoma;background:#F1F8E9;padding:16px\"><h1>\u0645\u062f\u06cc\u0631\u06cc\u062a \u0645\u0646\u0648</h1><p>API: /api/menu</p><p>Admin key: reyhoon-admin-2024</p></body></html>";
+  return "<!DOCTYPE html><html lang=fa dir=rtl><head><meta charset=utf-8><meta name=viewport content=\"width=device-width,initial-scale=1\"><title>Menu Admin</title></head><body style=\"font-family:Tahoma;background:#F1F8E9;padding:16px\"><h1>Menu</h1><p>API: /api/menu</p></body></html>";
 }
