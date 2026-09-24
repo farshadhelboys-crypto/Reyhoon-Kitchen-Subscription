@@ -33,6 +33,34 @@ object AppRepository {
         if (idx >= 0) customers[idx] = customer else customers.add(customer)
     }
 
+    /** سفارش مجازی برای بدهی قبلی مشتری (قابل تسویه مثل بقیه) */
+    fun ensurePriorDebtOrder(customer: Customer) {
+        if (customer.debt <= 0) return
+        // اگر از قبل سفارش بدهی قبلی هست، دوباره نساز (جلوگیری از دوبل با سرور)
+        if (orders.any { it.customerId == customer.id && it.source == "prior_debt" }) return
+        val amount = customer.debt
+        val order = Order(
+            customerId = customer.id,
+            customerName = customer.name,
+            customerPhone = customer.phone,
+            customerAddress = customer.address.fullAddress(),
+            items = listOf(
+                OrderItem(
+                    foodId = "prior_debt",
+                    foodName = "بدهی قبلی",
+                    unitPrice = amount,
+                    quantity = 1
+                )
+            ),
+            totalAmount = amount,
+            paidAmount = 0L,
+            status = "delivered",
+            note = "بدهی قبلی هنگام ثبت مشتری",
+            source = "prior_debt"
+        )
+        orders.add(0, order)
+    }
+
     fun updateCustomer(customer: Customer) {
         val idx = customers.indexOfFirst { it.id == customer.id }
         if (idx >= 0) customers[idx] = customer
@@ -81,7 +109,6 @@ object AppRepository {
         if (overpay > 0) credit += overpay
 
         val paidOnOrder = creditApplied + cashUsed
-
         val order = Order(
             customerId = customer.id,
             customerName = customer.name,
@@ -91,32 +118,19 @@ object AppRepository {
             totalAmount = total,
             paidAmount = paidOnOrder,
             creditApplied = creditApplied,
-            source = "kitchen",
-            note = buildString {
-                if (note.isNotBlank()) append(note)
-                if (creditApplied > 0) {
-                    if (isNotEmpty()) append(" | ")
-                    append("کسر از اعتبار: ${formatPrice(creditApplied)}")
-                }
-                if (overpay > 0) {
-                    if (isNotEmpty()) append(" | ")
-                    append("اعتبار اضافه‌پرداخت: ${formatPrice(overpay)}")
-                }
-            }
+            note = note,
+            source = "kitchen"
         )
         orders.add(0, order)
 
         if (cashUsed > 0 || overpay > 0) {
             payments.add(
+                0,
                 Payment(
                     customerId = customer.id,
                     orderId = order.id,
                     amount = cashUsed + overpay,
-                    note = when {
-                        overpay > 0 && cashUsed > 0 -> "پرداخت سفارش + اعتبار"
-                        overpay > 0 -> "فقط اعتبار (اضافه‌پرداخت)"
-                        else -> "پرداخت هنگام ثبت سفارش"
-                    }
+                    note = note.ifBlank { "پرداخت هنگام سفارش" }
                 )
             )
         }
@@ -126,16 +140,14 @@ object AppRepository {
         updateCustomer(updated)
         syncCurrentCustomer(customer.id)
 
-        val shortfall = afterCredit - cashUsed
         val message = buildString {
-            append("سفارش ثبت شد. جمع: ${formatPrice(total)} تومان")
-            if (creditApplied > 0) append("\n✓ کسر اعتبار: ${formatPrice(creditApplied)}")
-            if (overpay > 0) append("\n✓ اعتبار جدید: ${formatPrice(overpay)}")
-            if (shortfall > 0) append("\n⚠ بدهی این سفارش: ${formatPrice(shortfall)}")
-            if (credit > 0) append("\nاعتبار باقی: ${formatPrice(credit)}")
+            append("سفارش ثبت شد — جمع: ${formatPrice(total)}")
+            if (creditApplied > 0) append("\nاعتبار کسرشده: ${formatPrice(creditApplied)}")
+            if (cashUsed > 0) append("\nدریافتی نقد: ${formatPrice(cashUsed)}")
+            if (overpay > 0) append("\nمازاد به اعتبار: ${formatPrice(overpay)}")
             if (debt > 0) append("\nبدهی کل: ${formatPrice(debt)}")
+            else if (credit > 0) append("\nاعتبار مشتری: ${formatPrice(credit)}")
         }
-
         return OrderResult(order, creditApplied, credit, debt, message)
     }
 
@@ -144,7 +156,22 @@ object AppRepository {
         val customer = findCustomer(customerId) ?: return
         var remainingPay = amount
 
+        if (orderId != null) {
+            val idx = orders.indexOfFirst { it.id == orderId && it.customerId == customerId }
+            if (idx >= 0) {
+                val o = orders[idx]
+                val pay = minOf(remainingPay, o.remaining)
+                orders[idx] = o.copy(paidAmount = o.paidAmount + pay)
+                remainingPay -= pay
+            }
+        }
+
+        if (remainingPay > 0) {
+            remainingPay = applyToOpenOrders(customerId, remainingPay)
+        }
+
         payments.add(
+            0,
             Payment(
                 customerId = customerId,
                 orderId = orderId,
@@ -153,44 +180,25 @@ object AppRepository {
             )
         )
 
-        if (orderId != null) {
-            val idx = orders.indexOfFirst { it.id == orderId }
-            if (idx >= 0) {
-                val o = orders[idx]
-                val canPay = minOf(remainingPay, o.remaining)
-                if (canPay > 0) {
-                    orders[idx] = o.copy(paidAmount = o.paidAmount + canPay)
-                    remainingPay -= canPay
-                }
-            }
-            if (remainingPay > 0) {
-                remainingPay = applyToOpenOrders(customerId, remainingPay)
-            }
-        } else {
-            remainingPay = applyToOpenOrders(customerId, remainingPay)
-        }
-
         val newDebt = recalculateDebt(customerId)
         val newCredit = customer.credit + remainingPay
-
         updateCustomer(customer.copy(debt = newDebt, credit = newCredit))
         syncCurrentCustomer(customerId)
     }
 
     private fun applyToOpenOrders(customerId: String, payAmount: Long): Long {
-        var remaining = payAmount
+        var left = payAmount
         val open = orders
             .mapIndexed { index, order -> index to order }
             .filter { it.second.customerId == customerId && it.second.remaining > 0 }
             .sortedBy { it.second.createdAt }
-
-        for ((idx, o) in open) {
-            if (remaining <= 0) break
-            val canPay = minOf(remaining, o.remaining)
-            orders[idx] = o.copy(paidAmount = o.paidAmount + canPay)
-            remaining -= canPay
+        for ((idx, order) in open) {
+            if (left <= 0) break
+            val pay = minOf(left, order.remaining)
+            orders[idx] = order.copy(paidAmount = order.paidAmount + pay)
+            left -= pay
         }
-        return remaining
+        return left
     }
 
     fun clearAllLocal() {
@@ -202,36 +210,29 @@ object AppRepository {
     }
 
     fun getSalesSummary(period: String): SalesSummary {
-        val now = System.currentTimeMillis()
         val cal = Calendar.getInstance()
-
-        val filtered = when (period) {
-            "روزانه" -> {
+        val now = System.currentTimeMillis()
+        val start: Long = when (period) {
+            "day" -> {
                 cal.timeInMillis = now
                 cal.set(Calendar.HOUR_OF_DAY, 0)
                 cal.set(Calendar.MINUTE, 0)
                 cal.set(Calendar.SECOND, 0)
                 cal.set(Calendar.MILLISECOND, 0)
-                orders.filter { it.createdAt >= cal.timeInMillis }
+                cal.timeInMillis
             }
-            "هفتگی" -> {
-                cal.timeInMillis = now
-                cal.add(Calendar.DAY_OF_YEAR, -7)
-                orders.filter { it.createdAt >= cal.timeInMillis }
-            }
-            "ماهانه" -> {
-                cal.timeInMillis = now
-                cal.add(Calendar.MONTH, -1)
-                orders.filter { it.createdAt >= cal.timeInMillis }
-            }
-            else -> orders.toList()
+            "week" -> now - 7L * 24 * 60 * 60 * 1000
+            "month" -> now - 30L * 24 * 60 * 60 * 1000
+            else -> 0L
         }
-
+        val filtered = orders.filter { it.createdAt >= start && it.source != "prior_debt" }
+        val totalSales = filtered.sumOf { it.totalAmount }
+        val totalPaid = filtered.sumOf { it.paidAmount }
         return SalesSummary(
             period = period,
-            totalSales = filtered.sumOf { it.totalAmount },
-            totalPaid = filtered.sumOf { it.paidAmount },
-            totalDebt = filtered.sumOf { it.remaining },
+            totalSales = totalSales,
+            totalPaid = totalPaid,
+            totalDebt = totalCustomerDebt(),
             orderCount = filtered.size
         )
     }
@@ -240,14 +241,10 @@ object AppRepository {
     fun totalCustomerCredit(): Long = customers.sumOf { it.credit }
 
     fun formatPrice(price: Long): String {
-        return "%,d".format(price).replace(',', '٬')
+        return "%,d".format(price).replace(',', '،')
     }
 
     fun generateLocalCode(): String {
-        var code: String
-        do {
-            code = (100000 + (Math.random() * 900000).toInt()).toString()
-        } while (customers.any { it.subscriptionCode == code })
-        return code
+        return (100000..999999).random().toString()
     }
 }
