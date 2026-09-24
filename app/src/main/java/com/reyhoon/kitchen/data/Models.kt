@@ -79,7 +79,10 @@ data class Order(
     val note: String = "",
     val source: String = ""
 ) {
+    /** باقیمانده بدهی سفارش (پس از اعتبار + دریافتی نقد) */
     val remaining: Long get() = (totalAmount - paidAmount).coerceAtLeast(0)
+    /** فقط پول نقد واقعی — اعتبار مشتری جزو درآمد نیست */
+    val cashReceived: Long get() = (paidAmount - creditApplied).coerceAtLeast(0)
     val isFullyPaid: Boolean get() = remaining == 0L
     val statusEnum: OrderStatus get() = OrderStatus.fromKey(status)
 }
