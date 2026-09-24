@@ -1,5 +1,6 @@
 package com.reyhoon.kitchen.data
 
+import com.reyhoon.kitchen.util.AppLog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
@@ -19,7 +20,10 @@ object ApiClient {
             connectTimeout = 15000
             readTimeout = 20000
             setRequestProperty("Accept", "application/json")
-            if (admin) setRequestProperty("X-Admin-Key", ApiConfig.ADMIN_KEY)
+            if (admin) {
+                setRequestProperty("X-Admin-Key", ApiConfig.ADMIN_KEY)
+                AppLog.d("HTTP", "$method $path adminKeyLen=${ApiConfig.ADMIN_KEY.length}")
+            }
             useCaches = false
         }
     }
@@ -56,7 +60,7 @@ object ApiClient {
             val body = readBody(c)
             c.disconnect()
             val arr = JSONArray(body)
-            (0 until arr.length()).mapNotNull { i ->
+            val list = (0 until arr.length()).mapNotNull { i ->
                 val o = arr.getJSONObject(i)
                 if (o.optString("name") == "__ping__") return@mapNotNull null
                 FoodItem(
@@ -70,12 +74,25 @@ object ApiClient {
                     priceTier = o.optString("priceTier", "regular").ifBlank { "regular" }
                 )
             }
-        } catch (_: Exception) { emptyList() }
+            AppLog.i("MenuAPI", "fetchMenu count=${list.size}")
+            list
+        } catch (e: Exception) {
+            AppLog.e("MenuAPI", "fetchMenu failed", e)
+            emptyList()
+        }
     }
 
-    suspend fun createMenuItem(item: FoodItem): FoodItem? = withContext(Dispatchers.IO) {
-        if (!ApiConfig.isConfigured) return@withContext null
+    data class MenuSaveResult(val item: FoodItem?, val httpCode: Int, val error: String?)
+
+    suspend fun createMenuItem(item: FoodItem): FoodItem? = createMenuItemDetailed(item).item
+
+    suspend fun createMenuItemDetailed(item: FoodItem): MenuSaveResult = withContext(Dispatchers.IO) {
+        if (!ApiConfig.isConfigured) {
+            AppLog.w("MenuAPI", "create: API تنظیم نشده")
+            return@withContext MenuSaveResult(null, 0, "آدرس سرور تنظیم نشده")
+        }
         try {
+            AppLog.i("MenuAPI", "POST /api/menu name=${item.name} price=${item.price} tier=${item.priceTier}")
             val c = conn("/api/menu", "POST", admin = true)
             writeJson(c, JSONObject()
                 .put("name", item.name).put("description", item.description)
@@ -86,9 +103,18 @@ object ApiClient {
             val body = readBody(c)
             val code = c.responseCode
             c.disconnect()
-            if (code !in 200..299) return@withContext null
+            AppLog.i("MenuAPI", "POST response code=$code body=${body.take(200)}")
+            if (code !in 200..299) {
+                val err = try { JSONObject(body).optString("error", body) } catch (_: Exception) { body }
+                val msg = when (code) {
+                    401 -> "دسترسی ادمین رد شد (کلید ادمین اشتباه یا ست نشده روی سرور)"
+                    404 -> "مسیر /api/menu پیدا نشد — Worker را دوباره دیپلوی کنید"
+                    else -> "خطای سرور $code: $err"
+                }
+                return@withContext MenuSaveResult(null, code, msg)
+            }
             val o = JSONObject(body)
-            FoodItem(
+            val saved = FoodItem(
                 id = o.optString("id", item.id),
                 name = o.optString("name", item.name),
                 description = o.optString("description", item.description),
@@ -98,12 +124,22 @@ object ApiClient {
                 extraSkewerPrice = o.optLong("extraSkewerPrice", item.extraSkewerPrice),
                 priceTier = o.optString("priceTier", item.priceTier).ifBlank { item.priceTier }
             )
-        } catch (_: Exception) { null }
+            AppLog.i("MenuAPI", "create OK id=${saved.id}")
+            MenuSaveResult(saved, code, null)
+        } catch (e: Exception) {
+            AppLog.e("MenuAPI", "create exception", e)
+            MenuSaveResult(null, -1, "خطای شبکه: ${e.message}")
+        }
     }
 
-    suspend fun updateMenuItem(item: FoodItem): FoodItem? = withContext(Dispatchers.IO) {
-        if (!ApiConfig.isConfigured) return@withContext null
+    suspend fun updateMenuItem(item: FoodItem): FoodItem? = updateMenuItemDetailed(item).item
+
+    suspend fun updateMenuItemDetailed(item: FoodItem): MenuSaveResult = withContext(Dispatchers.IO) {
+        if (!ApiConfig.isConfigured) {
+            return@withContext MenuSaveResult(null, 0, "آدرس سرور تنظیم نشده")
+        }
         try {
+            AppLog.i("MenuAPI", "PUT /api/menu/${item.id} name=${item.name}")
             val c = conn("/api/menu/${item.id}", "PUT", admin = true)
             writeJson(c, JSONObject()
                 .put("name", item.name).put("description", item.description)
@@ -114,9 +150,18 @@ object ApiClient {
             val body = readBody(c)
             val code = c.responseCode
             c.disconnect()
-            if (code !in 200..299) return@withContext null
+            AppLog.i("MenuAPI", "PUT response code=$code body=${body.take(200)}")
+            if (code !in 200..299) {
+                val err = try { JSONObject(body).optString("error", body) } catch (_: Exception) { body }
+                val msg = when (code) {
+                    401 -> "دسترسی ادمین رد شد (کلید ادمین)"
+                    404 -> "غذا روی سرور پیدا نشد"
+                    else -> "خطای سرور $code: $err"
+                }
+                return@withContext MenuSaveResult(null, code, msg)
+            }
             val o = JSONObject(body)
-            FoodItem(
+            val saved = FoodItem(
                 id = o.optString("id", item.id),
                 name = o.optString("name", item.name),
                 description = o.optString("description", item.description),
@@ -126,7 +171,11 @@ object ApiClient {
                 extraSkewerPrice = o.optLong("extraSkewerPrice", item.extraSkewerPrice),
                 priceTier = o.optString("priceTier", item.priceTier).ifBlank { item.priceTier }
             )
-        } catch (_: Exception) { null }
+            MenuSaveResult(saved, code, null)
+        } catch (e: Exception) {
+            AppLog.e("MenuAPI", "update exception", e)
+            MenuSaveResult(null, -1, "خطای شبکه: ${e.message}")
+        }
     }
 
     suspend fun deleteMenuItem(id: String): Boolean = withContext(Dispatchers.IO) {
