@@ -110,8 +110,11 @@ fun AdminCustomersScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                                 val realDebt = AppRepository.recalculateDebt(c.id).coerceAtLeast(c.debt)
                                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                     if (realDebt > 0) {
-                                        AssistChip(onClick = { }, label = { Text("بدهی: ${AppRepository.formatPrice(realDebt)}") },
-                                            colors = AssistChipDefaults.assistChipColors(labelColor = MaterialTheme.colorScheme.error))
+                                        AssistChip(
+                                            onClick = { paymentCustomer = c },
+                                            label = { Text("بدهی: ${AppRepository.formatPrice(realDebt)} — بزن برای تسویه") },
+                                            colors = AssistChipDefaults.assistChipColors(labelColor = MaterialTheme.colorScheme.error)
+                                        )
                                     }
                                     if (c.credit > 0) {
                                         AssistChip(onClick = { }, label = { Text("اعتبار: ${AppRepository.formatPrice(c.credit)}") },
@@ -208,18 +211,35 @@ fun AdminCustomersScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
     }
 
     paymentCustomer?.let { c ->
-        var amount by remember { mutableStateOf("") }
         val debt = AppRepository.recalculateDebt(c.id).coerceAtLeast(c.debt)
+        var amount by remember(c.id, debt) { mutableStateOf(if (debt > 0) debt.toString() else "") }
         AlertDialog(
             onDismissRequest = { paymentCustomer = null },
             title = { Text("تسویه بدهی - ${c.name}") },
             text = {
                 Column {
-                    Text("بدهی: ${AppRepository.formatPrice(debt)} تومان", fontWeight = FontWeight.Bold)
                     Text("فقط بعد از تسویه کامل، مازاد به اعتبار می‌رود.", style = MaterialTheme.typography.bodySmall)
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Text("برای پر کردن فیلد، روی مبلغ بزنید:", style = MaterialTheme.typography.bodySmall)
+                    Spacer(modifier = Modifier.height(6.dp))
+                    FilterChip(
+                        selected = amount == debt.toString(),
+                        onClick = { amount = debt.toString() },
+                        label = {
+                            Text(
+                                "کل بدهی: ${AppRepository.formatPrice(debt)} تومان",
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    )
                     Spacer(modifier = Modifier.height(12.dp))
-                    OutlinedTextField(value = amount, onValueChange = { amount = it.filter { ch -> ch.isDigit() } },
-                        label = { Text("مبلغ (تومان)") }, singleLine = true)
+                    OutlinedTextField(
+                        value = amount,
+                        onValueChange = { amount = it.filter { ch -> ch.isDigit() } },
+                        label = { Text("مبلغ (تومان)") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
                 }
             },
             confirmButton = {
