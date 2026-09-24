@@ -235,7 +235,8 @@ object ApiClient {
             val arr = JSONArray()
             items.forEach {
                 arr.put(JSONObject().put("foodId", it.foodId).put("foodName", it.foodName)
-                    .put("unitPrice", it.unitPrice).put("quantity", it.quantity))
+                    .put("unitPrice", it.unitPrice).put("quantity", it.quantity)
+                    .put("priceTier", it.priceTier))
             }
             val c = conn("/api/orders", "POST")
             writeJson(c, JSONObject().put("customerId", customerId).put("items", arr)
@@ -358,8 +359,13 @@ object ApiClient {
         val itemsArr = o.optJSONArray("items") ?: JSONArray()
         val items = (0 until itemsArr.length()).map { i ->
             val it = itemsArr.getJSONObject(i)
-            OrderItem(it.optString("foodId"), it.optString("foodName"),
-                it.optLong("unitPrice"), it.optInt("quantity", 1))
+            OrderItem(
+                foodId = it.optString("foodId"),
+                foodName = it.optString("foodName"),
+                unitPrice = it.optLong("unitPrice"),
+                quantity = it.optInt("quantity", 1),
+                priceTier = it.optString("priceTier", "regular").ifBlank { "regular" }
+            )
         }
         val addrObj = o.optJSONObject("customerAddressObj")
         val addressStr = o.optString("customerAddress").ifBlank {
