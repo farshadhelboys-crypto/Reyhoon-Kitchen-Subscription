@@ -30,8 +30,8 @@ import kotlinx.coroutines.launch
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun EnterCodeScreen(
-    onCodeEntered: () -> Unit,
-    onAdminLogin: () -> Unit,
+    onCustomerEntered: () -> Unit,
+    onAdminEntered: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     var code by remember { mutableStateOf("") }
@@ -51,7 +51,7 @@ fun EnterCodeScreen(
             val customer = if (ApiConfig.isConfigured) {
                 ApiClient.fetchCustomerByCode(trimmed)
             } else {
-                AppRepository.findCustomerByCode(trimmed)
+                AppRepository.findByCode(trimmed)
             }
             loading = false
             if (customer != null) {
@@ -59,7 +59,7 @@ fun EnterCodeScreen(
                 if (AppRepository.customers.none { it.id == customer.id }) {
                     AppRepository.customers.add(customer)
                 }
-                onCodeEntered()
+                onCustomerEntered()
             } else {
                 errorMessage = "کد اشتراک یافت نشد"
             }
@@ -172,7 +172,7 @@ fun EnterCodeScreen(
 
             Spacer(modifier = Modifier.height(28.dp))
 
-            TextButton(onClick = onAdminLogin) {
+            TextButton(onClick = onAdminEntered) {
                 Icon(Icons.Default.AdminPanelSettings, null, tint = OrangeSecondary)
                 Spacer(modifier = Modifier.width(8.dp))
                 Text("ورود ادمین / حسابداری", color = OrangeSecondary, fontWeight = FontWeight.SemiBold)
