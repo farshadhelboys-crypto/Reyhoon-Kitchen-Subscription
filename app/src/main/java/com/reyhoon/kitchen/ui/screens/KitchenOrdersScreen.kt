@@ -12,6 +12,7 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -200,6 +201,32 @@ private fun OrderCard(
             }
             if (order.customerAddress.isNotBlank()) {
                 Text("آدرس: ${order.customerAddress}")
+            }
+            if (order.customerLat != null && order.customerLng != null) {
+                val lat = order.customerLat!!
+                val lng = order.customerLng!!
+                FilledTonalButton(
+                    onClick = {
+                        try {
+                            val nav = Intent(
+                                Intent.ACTION_VIEW,
+                                Uri.parse("google.navigation:q=$lat,$lng")
+                            ).setPackage("com.google.android.apps.maps")
+                            callCtx.startActivity(nav)
+                        } catch (_: Exception) {
+                            try {
+                                callCtx.startActivity(
+                                    Intent(
+                                        Intent.ACTION_VIEW,
+                                        Uri.parse("geo:$lat,$lng?q=$lat,$lng(مشتری)")
+                                    )
+                                )
+                            } catch (_: Exception) { }
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.filledTonalButtonColors(containerColor = Color(0xFF1565C0).copy(alpha = 0.15f))
+                ) { Text("🧭 مسیریابی تا لوکیشن مشتری", fontWeight = FontWeight.Bold) }
             }
             Text("ثبت: ${formatTs(order.createdAt)}")
             if (order.deliveredAt != null) Text("تحویل: ${formatTs(order.deliveredAt)}", color = GreenMid)
