@@ -11,6 +11,7 @@ import android.media.RingtoneManager
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
@@ -215,23 +216,117 @@ fun ExistingLogin(onLoggedIn: (Customer) -> Unit, onBack: () -> Unit) {
 
 @Composable
 fun NewRegister(onRegistered: (Customer) -> Unit, onBack: () -> Unit) {
+    val context = LocalContext.current
     var name by remember { mutableStateOf("") }
     var phone by remember { mutableStateOf("") }
     var street by remember { mutableStateOf("") }
     var city by remember { mutableStateOf("") }
+    var lat by remember { mutableStateOf<Double?>(null) }
+    var lng by remember { mutableStateOf<Double?>(null) }
+    var locMsg by remember { mutableStateOf<String?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     var loading by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+    val locPermission = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { grants ->
+        val ok = grants[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
+            grants[Manifest.permission.ACCESS_COARSE_LOCATION] == true
+        if (ok) {
+            val pair = readLastLocation(context)
+            if (pair != null) {
+                lat = pair.first
+                lng = pair.second
+                locMsg = "موقعیت ثبت شد ✓"
+            } else {
+                locMsg = "موقعیت یافت نشد — GPS را روشن کنید و دوباره بزنید"
+            }
+        } else {
+            locMsg = "دسترسی موقعیت لازم است"
+        }
+    }
     Text("ثبت‌نام سریع", fontWeight = FontWeight.Bold, fontSize = 18.sp)
     OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("نام") }, singleLine = true, modifier = Modifier.fillMaxWidth())
     OutlinedTextField(value = phone, onValueChange = { phone = it.filter { ch -> ch.isDigit() } }, label = { Text("تلفن") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-    OutlinedTextField(value = street, onValueChange = { street = it }, label = { Text("آدرس کامل") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+    OutlinedTextField(value = street, onValueChange = { street = it }, label = { Text("آدرس متنی") }, singleLine = true, modifier = Modifier.fillMaxWidth())
     OutlinedTextField(value = city, onValueChange = { city = it }, label = { Text("شهر") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+    Spacer(modifier = Modifier.height(8.dp))
+    Text("لوکیشن روی نقشه (الزامی)", fontWeight = FontWeight.Bold, color = Color(0xFFC62828))
+    Text("برای ارسال پیک باید موقعیت دقیق ثبت شود.", style = MaterialTheme.typography.bodySmall)
+    Button(
+        onClick = {
+            val fine = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+            val coarse = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+            if (fine || coarse) {
+                val pair = readLastLocation(context)
+                if (pair != null) {
+                    lat = pair.first
+                    lng = pair.second
+                    locMsg = "موقعیت ثبت شد ✓"
+                } else {
+                    locMsg = "موقعیت یافت نشد — GPS را روشن کنید"
+                }
+            } else {
+                locPermission.launch(arrayOf(
+                    Manifest.permission.ACCESS_FINE_LOCATION,
+                    Manifest.permission.ACCESS_COARSE_LOCATION
+                ))
+            }
+        },
+        modifier = Modifier.fillMaxWidth(),
+        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1565C0))
+    ) { Text("📍 ثبت موقعیت فعلی از GPS", fontWeight = FontWeight.Bold) }
+    if (lat != null && lng != null) {
+        Text("مختصات: ${"%.5f".format(lat)} , ${"%.5f".format(lng)}", fontWeight = FontWeight.SemiBold, color = Color(0xFF2E7D32))
+        TextButton(onClick = {
+            try {
+                context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("geo:$lat,$lng?q=$lat,$lng(منزل)")))
+            } catch (_: Exception) { }
+        }) { Text("مشاهده روی نقشه") }
+    }
+    locMsg?.let { Text(it, color = if (lat != null) Color(0xFF2E7D32) else Color(0xFFC62828), fontWeight = FontWeight.SemiBold) }
     error?.let { Text(it, color = Color(0xFFC62828), fontWeight = FontWeight.Bold) }
-    Button(onClick = { scope.launch { loading = true; val c = ApiClient.register(name.trim(), phone.trim(), street.trim(), city.trim()); loading = false; if (c != null) onRegistered(c) else error = "خطا در ثبت‌نام" } }, enabled = name.isNotBlank() && phone.length >= 10 && !loading, modifier = Modifier.fillMaxWidth().height(50.dp)) {
-        if (loading) CircularProgressIndicator(modifier = Modifier.size(22.dp), color = Color.White) else Text("ثبت و ورود", fontWeight = FontWeight.Bold)
+    Button(
+        onClick = {
+            val la = lat
+            val ln = lng
+            if (la == null || ln == null) {
+                error = "ابتدا لوکیشن را از GPS ثبت کنید"
+                return@Button
+            }
+            scope.launch {
+                loading = true
+                val c = ApiClient.register(name.trim(), phone.trim(), street.trim(), city.trim(), la, ln)
+                loading = false
+                if (c != null) onRegistered(c) else error = "خطا در ثبت‌نام"
+            }
+        },
+        enabled = name.isNotBlank() && phone.length >= 10 && lat != null && lng != null && !loading,
+        modifier = Modifier.fillMaxWidth().height(50.dp)
+    ) {
+        if (loading) CircularProgressIndicator(modifier = Modifier.size(22.dp), color = Color.White)
+        else Text("ثبت و ورود", fontWeight = FontWeight.Bold)
     }
     TextButton(onClick = onBack) { Text("بازگشت") }
+}
+
+@Suppress("MissingPermission")
+private fun readLastLocation(context: Context): Pair<Double, Double>? {
+    return try {
+        val lm = context.getSystemService(Context.LOCATION_SERVICE) as android.location.LocationManager
+        val providers = listOf(
+            android.location.LocationManager.GPS_PROVIDER,
+            android.location.LocationManager.NETWORK_PROVIDER
+        )
+        var best: android.location.Location? = null
+        for (p in providers) {
+            try {
+                val l = lm.getLastKnownLocation(p) ?: continue
+                if (best == null || l.accuracy < best!!.accuracy) best = l
+            } catch (_: Exception) { }
+        }
+        best?.let { it.latitude to it.longitude }
+    } catch (_: Exception) { null }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -329,6 +424,9 @@ fun MenuOrderTab(customer: Customer) {
                                 Spacer(modifier = Modifier.width(10.dp))
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(f.name, fontWeight = FontWeight.Bold)
+                                    if (f.description.isNotBlank()) {
+                                        Text(f.description, style = MaterialTheme.typography.bodySmall, color = Color(0xFF616161))
+                                    }
                                     Text("${fmt(f.price)} تومان", color = Color(0xFFE65100), fontWeight = FontWeight.Bold)
                                 }
                                 IconButton(onClick = { qty = qty.toMutableMap().apply { put(f.id, ((qty[f.id] ?: 0) - 1).coerceAtLeast(0)) } }) { Icon(Icons.Filled.Remove, null) }
