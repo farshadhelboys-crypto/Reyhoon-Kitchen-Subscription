@@ -1,5 +1,5 @@
 /**
- * Reyhoon API — STORE KV + cancel order + priceTier
+ * Reyhoon API — STORE KV + cancel + priceTier + customerLat/Lng
  */
 var CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -126,9 +126,14 @@ async function handleRequest(request, env) {
       customers = await load(env, "customers");
       var newCode = genCode();
       while (customers.some(function (c) { return c.subscriptionCode === newCode; })) newCode = genCode();
+      var addr = body.address || { street: "", city: "" };
       var cust = {
         id: uid(), name: name, phone: phone,
-        address: body.address || { street: "", city: "" },
+        address: {
+          street: addr.street || "", city: addr.city || "",
+          lat: (addr.lat != null) ? Number(addr.lat) : null,
+          lng: (addr.lng != null) ? Number(addr.lng) : null
+        },
         subscriptionCode: newCode, debt: 0, credit: 0,
         notes: "", createdAt: Date.now(), isSelfRegistered: true
       };
@@ -143,9 +148,15 @@ async function handleRequest(request, env) {
       var rawCode = (body.subscriptionCode || "").trim();
       code = rawCode || genCode();
       var priorDebt = Math.max(0, Number(body.debt) || 0);
+      addr = body.address || { street: "", city: "", postalCode: "", notes: "" };
       cust = {
         id: uid(), name: (body.name || "").trim(), phone: (body.phone || "").trim(),
-        address: body.address || { street: "", city: "", postalCode: "", notes: "" },
+        address: {
+          street: addr.street || "", city: addr.city || "",
+          postalCode: addr.postalCode || "", notes: addr.notes || "",
+          lat: (addr.lat != null) ? Number(addr.lat) : null,
+          lng: (addr.lng != null) ? Number(addr.lng) : null
+        },
         subscriptionCode: code, debt: priorDebt, credit: Number(body.credit) || 0,
         notes: body.notes || "", createdAt: Date.now(), isSelfRegistered: false
       };
@@ -210,6 +221,8 @@ async function handleRequest(request, env) {
         customerAddress: customer.address
           ? [customer.address.street, customer.address.city].filter(Boolean).join(" - ")
           : "",
+        customerLat: (customer.address && customer.address.lat != null) ? Number(customer.address.lat) : null,
+        customerLng: (customer.address && customer.address.lng != null) ? Number(customer.address.lng) : null,
         items: items, totalAmount: total,
         paidAmount: cashUsed + creditUsed,
         creditApplied: creditUsed,
