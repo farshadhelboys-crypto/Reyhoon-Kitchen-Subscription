@@ -203,30 +203,22 @@ private fun OrderCard(
                 Text("آدرس: ${order.customerAddress}")
             }
             if (order.customerLat != null && order.customerLng != null) {
+                var showNavChooser by remember(order.id) { mutableStateOf(false) }
                 val lat = order.customerLat!!
                 val lng = order.customerLng!!
                 FilledTonalButton(
-                    onClick = {
-                        try {
-                            val nav = Intent(
-                                Intent.ACTION_VIEW,
-                                Uri.parse("google.navigation:q=$lat,$lng")
-                            ).setPackage("com.google.android.apps.maps")
-                            callCtx.startActivity(nav)
-                        } catch (_: Exception) {
-                            try {
-                                callCtx.startActivity(
-                                    Intent(
-                                        Intent.ACTION_VIEW,
-                                        Uri.parse("geo:$lat,$lng?q=$lat,$lng(مشتری)")
-                                    )
-                                )
-                            } catch (_: Exception) { }
-                        }
-                    },
+                    onClick = { showNavChooser = true },
                     modifier = Modifier.fillMaxWidth(),
                     colors = ButtonDefaults.filledTonalButtonColors(containerColor = Color(0xFF1565C0).copy(alpha = 0.15f))
                 ) { Text("🧭 مسیریابی تا لوکیشن مشتری", fontWeight = FontWeight.Bold) }
+                if (showNavChooser) {
+                    NavAppChooserDialog(
+                        lat = lat,
+                        lng = lng,
+                        context = callCtx,
+                        onDismiss = { showNavChooser = false }
+                    )
+                }
             }
             Text("ثبت: ${formatTs(order.createdAt)}")
             if (order.deliveredAt != null) Text("تحویل: ${formatTs(order.deliveredAt)}", color = GreenMid)
@@ -295,4 +287,54 @@ private fun OrderCard(
             }
         }
     }
+}
+
+@Composable
+private fun NavAppChooserDialog(
+    lat: Double,
+    lng: Double,
+    context: android.content.Context,
+    onDismiss: () -> Unit
+) {
+    data class NavOption(val title: String, val uri: String, val packageName: String? = null)
+    val options = listOf(
+        NavOption("گوگل مپ (مسیریابی)", "google.navigation:q=$lat,$lng", "com.google.android.apps.maps"),
+        NavOption("نشان (Neshan)", "https://neshan.org/maps/@$lat,$lng,17z", "org.rajman.neshan.traffic.tehran.navigator"),
+        NavOption("بلد (Balad)", "https://balad.ir/directions?destination_point=$lat,$lng", "com.balad"),
+        NavOption("ویز (Waze)", "https://waze.com/ul?ll=$lat,$lng&navigate=yes", "com.waze"),
+        NavOption("هر اپ نقشه نصب‌شده", "geo:$lat,$lng?q=$lat,$lng(مشتری)", null)
+    )
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("کدام مسیریاب؟", fontWeight = FontWeight.Bold) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text("برنامه مورد نظر را انتخاب کنید:")
+                options.forEach { opt ->
+                    OutlinedButton(
+                        onClick = {
+                            try {
+                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(opt.uri))
+                                if (opt.packageName != null) {
+                                    intent.setPackage(opt.packageName)
+                                }
+                                context.startActivity(intent)
+                            } catch (_: Exception) {
+                                try {
+                                    val fallback = Intent(Intent.ACTION_VIEW, Uri.parse(opt.uri))
+                                    context.startActivity(Intent.createChooser(fallback, "انتخاب مسیریاب"))
+                                } catch (_: Exception) { }
+                            }
+                            onDismiss()
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Text(opt.title, fontWeight = FontWeight.SemiBold) }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("بستن") }
+        }
+    )
 }
