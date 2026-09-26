@@ -11,8 +11,14 @@ import java.net.HttpURLConnection
 import java.net.URL
 
 data class FoodItem(val id: String, val name: String, val description: String, val price: Long, val category: String, val extraSkewerPrice: Long = 0L, val priceTier: String = "regular")
-data class Address(val street: String, val city: String) {
+data class Address(
+    val street: String,
+    val city: String,
+    val latitude: Double? = null,
+    val longitude: Double? = null
+) {
     fun full(): String = listOf(street, city).filter { it.isNotBlank() }.joinToString(" - ")
+    val hasLocation: Boolean get() = latitude != null && longitude != null
 }
 data class Customer(
     val id: String, val name: String, val phone: String,
@@ -60,6 +66,17 @@ object ApiClient {
         OutputStreamWriter(c.outputStream, Charsets.UTF_8).use { it.write(body.toString()) }
     }
 
+    private fun parseAddress(a: JSONObject?): Address {
+        return Address(
+            a?.optString("street") ?: "",
+            a?.optString("city") ?: "",
+            a?.optDouble("lat", Double.NaN)?.takeIf { !it.isNaN() }
+                ?: a?.optDouble("latitude", Double.NaN)?.takeIf { !it.isNaN() },
+            a?.optDouble("lng", Double.NaN)?.takeIf { !it.isNaN() }
+                ?: a?.optDouble("longitude", Double.NaN)?.takeIf { !it.isNaN() }
+        )
+    }
+
     suspend fun login(code: String): Customer? = loginByCode(code)
 
     suspend fun loginByCode(code: String): Customer? = withContext(Dispatchers.IO) {
@@ -72,36 +89,39 @@ object ApiClient {
             c.disconnect()
             if (codeResp != 200) return@withContext null
             val o = JSONObject(body)
-            val a = o.optJSONObject("address")
             Customer(
                 o.optString("id"), o.optString("name"), o.optString("phone"),
                 o.optString("subscriptionCode").ifBlank { null },
                 o.optLong("debt"), o.optLong("credit"),
-                Address(a?.optString("street") ?: "", a?.optString("city") ?: "")
+                parseAddress(o.optJSONObject("address"))
             )
         } catch (_: Exception) { null }
     }
 
-    suspend fun register(name: String, phone: String, street: String, city: String): Customer? =
+    suspend fun register(
+        name: String, phone: String, street: String, city: String,
+        lat: Double, lng: Double
+    ): Customer? =
         withContext(Dispatchers.IO) {
             if (!ApiConfig.isConfigured) return@withContext null
             try {
                 val c = conn("/api/customers/register", "POST")
                 write(c, JSONObject()
                     .put("name", name).put("phone", phone)
-                    .put("address", JSONObject().put("street", street).put("city", city)))
+                    .put("address", JSONObject()
+                        .put("street", street).put("city", city)
+                        .put("lat", lat).put("lng", lng)))
                 val body = read(c)
                 val code = c.responseCode
                 c.disconnect()
                 if (code !in 200..299) return@withContext null
                 val root = JSONObject(body)
                 val o = root.optJSONObject("customer") ?: root
-                val a = o.optJSONObject("address")
                 Customer(
                     o.optString("id"), o.optString("name"), o.optString("phone"),
                     o.optString("subscriptionCode").ifBlank { null },
                     o.optLong("debt"), o.optLong("credit"),
-                    Address(a?.optString("street") ?: "", a?.optString("city") ?: "")
+                    parseAddress(o.optJSONObject("address"))
                 )
             } catch (_: Exception) { null }
         }
@@ -117,7 +137,7 @@ object ApiClient {
                 val o = arr.getJSONObject(it)
                 if (o.optString("name") == "__ping__") null
                 else FoodItem(
-                    o.optString("id"), o.optString("name"), o.optString("description"),
+                    o.optString("id"), o.optString("name"), o.optString("description", ""),
                     o.optLong("price"), o.optString("category", "عمومی"),
                     o.optLong("extraSkewerPrice", 0),
                     o.optString("priceTier", "regular").ifBlank { "regular" }
