@@ -142,6 +142,9 @@ fun MenuScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                                             Spacer(modifier = Modifier.width(10.dp))
                                             Column(modifier = Modifier.weight(1f)) {
                                                 Text(food.name, fontWeight = FontWeight.Medium)
+                                                if (food.description.isNotBlank()) {
+                                                    Text(food.description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                                }
                                                 Text(
                                                     "${AppRepository.formatPrice(food.price)} تومان",
                                                     style = MaterialTheme.typography.bodySmall,
