@@ -227,9 +227,14 @@ object AppRepository {
             "month" -> now - 30L * 24 * 60 * 60 * 1000
             else -> 0L
         }
-        val filtered = orders.filter { it.createdAt >= start && it.source != "prior_debt" }
+        // فروش فقط برای سفارش‌های تحویل‌شده — لغو شده و در جریان حساب نمی‌شوند
+        val filtered = orders.filter {
+            it.createdAt >= start &&
+                it.source != "prior_debt" &&
+                it.status == "delivered"
+        }
         val totalSales = filtered.sumOf { it.totalAmount }
-        // درآمد واقعی = فقط نقد؛ اعتبار مشتری درآمد نیست
+        // درآمد نقد واقعی فقط از سفارش‌های تحویل‌شده
         val totalPaid = filtered.sumOf { it.cashReceived }
         return SalesSummary(
             period = period,
