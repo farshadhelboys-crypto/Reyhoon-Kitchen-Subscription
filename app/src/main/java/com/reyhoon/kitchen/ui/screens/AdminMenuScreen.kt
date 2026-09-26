@@ -158,6 +158,9 @@ fun AdminMenuScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                                             Spacer(modifier = Modifier.width(12.dp))
                                             Column(modifier = Modifier.weight(1f)) {
                                                 Text(item.name, fontWeight = FontWeight.SemiBold)
+                                                if (item.description.isNotBlank()) {
+                                                    Text(item.description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                                }
                                                 Text(
                                                     buildString {
                                                         append(item.priceTierLabel)
@@ -198,7 +201,6 @@ fun AdminMenuScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
             onSave = { food ->
                 scope.launch {
                     AppLog.i("AdminMenu", "save start name=${food.name} price=${food.price} edit=${editing != null}")
-                    // 1) همیشه اول محلی ذخیره کن
                     if (editing != null) {
                         AppRepository.updateFood(food)
                     } else if (AppRepository.menuItems.none { it.id == food.id }) {
@@ -208,7 +210,6 @@ fun AdminMenuScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                     }
                     items = AppRepository.menuItems.toList()
 
-                    // 2) تلاش برای سرور
                     if (ApiConfig.isConfigured) {
                         val detail = if (editing != null) {
                             ApiClient.updateMenuItemDetailed(food)
