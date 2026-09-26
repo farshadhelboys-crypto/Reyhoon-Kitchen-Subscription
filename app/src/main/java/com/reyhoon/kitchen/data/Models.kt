@@ -18,13 +18,17 @@ data class Address(
     val street: String,
     val city: String,
     val postalCode: String = "",
-    val notes: String = ""
+    val notes: String = "",
+    /** مختصات نقشه — برای مسیریابی پیک */
+    val latitude: Double? = null,
+    val longitude: Double? = null
 ) {
     fun fullAddress(): String {
         return listOf(street, city, if (postalCode.isNotBlank()) "کدپستی: $postalCode" else "")
             .filter { it.isNotBlank() }
             .joinToString(" - ")
     }
+    val hasLocation: Boolean get() = latitude != null && longitude != null
 }
 
 data class FoodItem(
@@ -56,7 +60,6 @@ data class OrderItem(
     val foodName: String,
     val unitPrice: Long,
     val quantity: Int = 1,
-    /** economy | regular — از منوی اقتصادی / غیر اقتصادی */
     val priceTier: String = "regular"
 ) {
     val total: Long get() = unitPrice * quantity
@@ -82,6 +85,8 @@ data class Order(
     val customerName: String,
     val customerPhone: String = "",
     val customerAddress: String = "",
+    val customerLat: Double? = null,
+    val customerLng: Double? = null,
     val items: List<OrderItem>,
     val totalAmount: Long,
     val paidAmount: Long = 0L,
