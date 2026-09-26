@@ -295,6 +295,8 @@ object ApiClient {
                 .put("city", customer.address.city)
                 .put("postalCode", customer.address.postalCode)
                 .put("notes", customer.address.notes)
+            customer.address.latitude?.let { addr.put("lat", it) }
+            customer.address.longitude?.let { addr.put("lng", it) }
             val c = conn("/api/customers", "POST", admin = true)
             writeJson(c, JSONObject().put("name", customer.name).put("phone", customer.phone)
                 .put("subscriptionCode", customer.subscriptionCode).put("address", addr)
@@ -374,12 +376,16 @@ object ApiClient {
                     .filter { it.isNotBlank() }.joinToString(" - ")
             } else ""
         }
+        val lat = o.optDouble("customerLat", Double.NaN).takeIf { !it.isNaN() }
+        val lng = o.optDouble("customerLng", Double.NaN).takeIf { !it.isNaN() }
         return Order(
             id = o.optString("id"),
             customerId = o.optString("customerId"),
             customerName = o.optString("customerName"),
             customerPhone = o.optString("customerPhone", ""),
             customerAddress = addressStr,
+            customerLat = lat,
+            customerLng = lng,
             items = items,
             totalAmount = o.optLong("totalAmount"),
             paidAmount = o.optLong("paidAmount"),
@@ -411,7 +417,11 @@ object ApiClient {
                 street = a?.optString("street") ?: "",
                 city = a?.optString("city") ?: "",
                 postalCode = a?.optString("postalCode") ?: "",
-                notes = a?.optString("notes") ?: ""
+                notes = a?.optString("notes") ?: "",
+                latitude = a?.optDouble("lat", Double.NaN)?.takeIf { !it.isNaN() }
+                    ?: a?.optDouble("latitude", Double.NaN)?.takeIf { !it.isNaN() },
+                longitude = a?.optDouble("lng", Double.NaN)?.takeIf { !it.isNaN() }
+                    ?: a?.optDouble("longitude", Double.NaN)?.takeIf { !it.isNaN() }
             )
         )
     }
